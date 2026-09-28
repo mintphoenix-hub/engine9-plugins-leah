@@ -108,7 +108,7 @@ A host that follows these steps gets the plugin's behaviour, whatever its stack.
 
 ## Mentions
 
-`handleFor` chooses what someone types after the `@`: their first name, falling back to their display name with the spaces removed, and a second person who shares a first name gets their display name instead so two people never answer to the same handle. Matching rules, all covered by `mentions.test.mjs`:
+`handleFor` chooses what someone types after the `@`: their first name, falling back to their display name with the spaces removed (or, for a person flagged `isExternal`, the first word of it), and a second person who shares a first name gets their display name instead so two people never answer to the same handle. Matching rules, all covered by `mentions.test.mjs`:
 
 - the longest handle wins (`@MaryAnne` is never read as `@Mary`);
 - a mention ends at a word boundary (`@Meg` does not fire inside `@Megan`);
@@ -183,6 +183,7 @@ node board/tags.test.mjs
 
 ## Versions
 
+- **1.4.0**: `isCrew` is now `isExternal` in `handleFor` / `withHandles`: a person the host keeps as a name rather than an account (contractor, volunteer, external collaborator) is addressed by the first word of their display name. Rename the flag when upgrading; there is no alias.
 - **1.3.0**: `@group` and `#topic` tags (`tags.js`, `post_tag`, `tag_follow`, `mention.via_tag`).
 - **1.2.0**: `mentions.js`: handle assignment and matching.
 - **1.1.0**: `post.deleted_at` (soft delete); `post.context_id` is a string.

@@ -7,7 +7,7 @@ const people = withHandles([
   { id:'other',  stageName:'Someone Else', firstName:'Jody' },
   { id:'meg2',stageName:'Meg Carter', firstName:'Meg' },
   { id:'sam',   stageName:'Sam Okoro', firstName:null },
-  { id:'alex',  name:'Alex Fontaine', firstName:null, isCrew:true },
+  { id:'alex',  name:'Alex Fontaine', firstName:null, isExternal:true },
 ]);
 console.log('handles:');
 ck('a first name is the handle', people.find(p=>p.id==='mary').handle==='Mary');
@@ -22,7 +22,7 @@ ck('@Jody on its own', parseMentions('@Jody knows', people).join()==='greta');
 ck('an email is not a mention', parseMentions('write to someone@example.com', people).length===0);
 ck('case and accents fold', parseMentions('@MARY', people).join()==='mary');
 ck('trailing punctuation still counts', parseMentions('thanks @Meg!', people).join()==='meg2');
-ck('crew can be named', parseMentions('ask @Alex about the run', people).join()==='alex');
+ck('an external person can be named', parseMentions('ask @Alex about the run', people).join()==='alex');
 ck('no @ at all is cheap and empty', parseMentions('nothing here', people).length===0);
 console.log('\nhighlighting:');
 const hits = findMentions('hi @Mary and @Joanna', people);

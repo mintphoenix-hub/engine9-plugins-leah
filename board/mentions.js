@@ -31,7 +31,7 @@ const escapeRe = (v) => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
    display name instead, so two people never answer to the same @.
 
    Somebody with no first name recorded gets the first word of their display name — "Alex
-   Fontaine" answers to @Alex — which is what a team already calls them. `isCrew` marks the
+   Fontaine" answers to @Alex — which is what a team already calls them. `isExternal` marks the
    people a host keeps as names rather than accounts (contractors, volunteers, external
    collaborators); they are handled the same way. */
 export function handleFor(person, taken = new Set()) {
@@ -40,7 +40,7 @@ export function handleFor(person, taken = new Set()) {
   const squashed = display.replace(/\s+/g, '');
   const firstWord = display.split(/\s+/)[0] || squashed;
 
-  const preferred = first || (person.isCrew ? firstWord : squashed);
+  const preferred = first || (person.isExternal ? firstWord : squashed);
   if (!preferred) return '';
   return taken.has(fold(preferred)) ? (squashed || preferred) : preferred;
 }

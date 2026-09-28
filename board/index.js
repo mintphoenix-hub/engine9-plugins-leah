@@ -7,7 +7,7 @@ const metadata = {
   name: 'Board',
   prefix: 'board',
   unique: true,
-  version: '1.3.0',
+  version: '1.4.0',
   dependencies: {
     '@engine9/interfaces/person': '>=1.0.0'
   },
