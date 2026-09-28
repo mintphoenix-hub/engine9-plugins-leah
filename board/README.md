@@ -2,6 +2,8 @@
 
 `@mintphoenix/plugins/board`: a message board for any team application. Threaded posts, emoji reactions, `@mentions`, `@group` and `#topic` tags that notify, per-person unread tracking, audience targeting, posts that hang off any other record, and an ideas list with votes and feedback.
 
+Working on it or wiring it in, with or without an assistant? Read [AGENTS.md](../AGENTS.md) for the rules.
+
 It is a **native plugin** (`metadata.unique: true`, `metadata.prefix: 'board'`) that depends on `@engine9/interfaces/person`. It owns the schema, the settings, the console screens and the pure parsing logic. Everything that touches your users, your notifications and your identity stays in your application, so nothing in the plugin assumes a particular product.
 
 ## Install
