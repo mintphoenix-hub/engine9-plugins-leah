@@ -1,12 +1,12 @@
 import { withHandles, parseMentions, findMentions, MENTION_PATTERN } from './mentions.js';
 let pass=0,fail=0; const ck=(n,c,d='')=>{console.log(`  ${c?'ok  ':'FAIL'}  ${n}${d?' -> '+d:''}`);c?pass++:fail++;};
 const people = withHandles([
-  { id:'mary', stageName:'Mary-Anne Blake', firstName:'Mary' },
-  { id:'jo',  stageName:'Jo Vance', firstName:'Joanna' },
-  { id:'greta',  stageName:'Greta Hall', firstName:'Jody' },
-  { id:'other',  stageName:'Someone Else', firstName:'Jody' },
-  { id:'meg2',stageName:'Meg Carter', firstName:'Meg' },
-  { id:'sam',   stageName:'Sam Okoro', firstName:null },
+  { id:'mary', displayName:'Mary-Anne Blake', firstName:'Mary' },
+  { id:'jo',  displayName:'Jo Vance', firstName:'Joanna' },
+  { id:'greta',  displayName:'Greta Hall', firstName:'Jody' },
+  { id:'other',  displayName:'Someone Else', firstName:'Jody' },
+  { id:'meg2',displayName:'Meg Carter', firstName:'Meg' },
+  { id:'sam',   displayName:'Sam Okoro', firstName:null },
   { id:'alex',  name:'Alex Fontaine', firstName:null, isExternal:true },
 ]);
 console.log('handles:');

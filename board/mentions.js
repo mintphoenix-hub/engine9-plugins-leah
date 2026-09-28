@@ -36,7 +36,7 @@ const escapeRe = (v) => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
    collaborators); they are handled the same way. */
 export function handleFor(person, taken = new Set()) {
   const first = (person.firstName || '').trim();
-  const display = String(person.displayName || person.stageName || person.name || '').trim();
+  const display = String(person.displayName || person.name || '').trim();
   const squashed = display.replace(/\s+/g, '');
   const firstWord = display.split(/\s+/)[0] || squashed;
 
