@@ -185,7 +185,7 @@ node board/tags.test.mjs
 
 ## Versions
 
-- **1.5.0**: `handleFor` reads only `displayName` (falling back to `name`); the `stageName` alias is gone. Pass the name you show for someone as `displayName`.
+- **1.5.0**: `handleFor` reads only `displayName` (falling back to `name`); any other name field is ignored. Pass the name you show for someone as `displayName`.
 - **1.4.0**: `isCrew` is now `isExternal` in `handleFor` / `withHandles`: a person the host keeps as a name rather than an account (contractor, volunteer, external collaborator) is addressed by the first word of their display name. Rename the flag when upgrading; there is no alias.
 - **1.3.0**: `@group` and `#topic` tags (`tags.js`, `post_tag`, `tag_follow`, `mention.via_tag`).
 - **1.2.0**: `mentions.js`: handle assignment and matching.
