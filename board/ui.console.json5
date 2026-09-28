@@ -1,0 +1,182 @@
+{
+  menu: {
+    'board-menu': {
+      title: 'Board',
+      icon: 'messages',
+      type: 'collapse',
+      children: {
+        posts: { title: 'Posts', icon: 'messages', url: '/board' },
+        ideas: { title: 'Ideas', icon: 'campaign', url: '/board/ideas' }
+      }
+    }
+  },
+  routes: {
+    board: {
+      layout: 'full_width',
+      components: {
+        header: [
+          'Board',
+          {
+            component: 'Button',
+            properties: {
+              icon: 'plus',
+              content: 'New post',
+              onClick: { action: 'navigate', url: '/board/create' }
+            }
+          }
+        ],
+        main: [
+          {
+            component: 'RecordTable',
+            properties: {
+              table: 'post',
+              conditions: [{ eql: 'is_reply=0' }],
+              columns: [
+                { title: 'Latest', dataIndex: 'last_activity_at', sorter: true, width: '18%' },
+                { title: 'From', dataIndex: 'author_name', sorter: true, width: '16%' },
+                { title: 'Post', dataIndex: 'body', template: '{{body}}', width: '54%' },
+                { title: 'Pinned', dataIndex: 'pinned', sorter: true, width: '12%' }
+              ],
+              onRecord: {
+                onClick: { action: 'navigate', url: '/board/{{record.id}}' }
+              }
+            }
+          }
+        ]
+      }
+    },
+    'board/create': {
+      layout: 'full_width',
+      components: {
+        main: [
+          {
+            path: 'edit',
+            component: 'RecordForm',
+            properties: {
+              table: 'post',
+              form: {
+                title: 'New post',
+                type: 'object',
+                required: ['body'],
+                properties: {
+                  body: { type: 'string', title: 'Post', default: '' },
+                  pinned: { type: 'boolean', title: 'Pin to top', default: false }
+                }
+              },
+              uiSchema: { body: { 'ui:widget': 'textarea', 'ui:options': { rows: 4 } } },
+              onSave: { action: 'navigate', url: '/board/{{record.id}}' }
+            }
+          }
+        ]
+      }
+    },
+    'board/ideas': {
+      layout: 'full_width',
+      components: {
+        header: [
+          'Ideas for future events',
+          {
+            component: 'Button',
+            properties: {
+              icon: 'plus',
+              content: 'Suggest one',
+              onClick: { action: 'navigate', url: '/board/ideas/create' }
+            }
+          }
+        ],
+        main: [
+          {
+            component: 'RecordTable',
+            properties: {
+              table: 'idea',
+              columns: [
+                { title: 'Idea', dataIndex: 'title', sorter: true, width: '34%' },
+                { title: 'When', dataIndex: 'timeframe', sorter: true, width: '18%' },
+                { title: 'From', dataIndex: 'author_name', sorter: true, width: '16%' },
+                { title: 'Status', dataIndex: 'status', sorter: true, width: '14%' },
+                { title: 'Posted', dataIndex: 'created_at', sorter: true, width: '18%' }
+              ],
+              onRecord: {
+                onClick: { action: 'navigate', url: '/board/ideas/{{record.id}}' }
+              }
+            }
+          }
+        ]
+      }
+    },
+    'board/ideas/create': {
+      layout: 'full_width',
+      components: {
+        main: [
+          {
+            path: 'edit',
+            component: 'RecordForm',
+            properties: {
+              table: 'idea',
+              form: {
+                title: 'Suggest an idea',
+                type: 'object',
+                required: ['title'],
+                properties: {
+                  title: { type: 'string', title: 'Event or theme', default: '' },
+                  timeframe: { type: 'string', title: 'Roughly when', default: '' },
+                  body: { type: 'string', title: 'The pitch', default: '' }
+                }
+              },
+              uiSchema: { body: { 'ui:widget': 'textarea', 'ui:options': { rows: 4 } } },
+              onSave: { action: 'navigate', url: '/board/ideas/{{record.id}}' }
+            }
+          }
+        ]
+      }
+    },
+    'board/ideas/:id/*': {
+      layout: 'full_width',
+      components: {
+        main: [
+          {
+            component: 'RecordForm',
+            properties: { table: 'idea', title: '{{record.title}}' }
+          },
+          { component: 'Title', properties: { content: 'Feedback' } },
+          {
+            component: 'RecordTable',
+            properties: {
+              table: 'idea_comment',
+              conditions: [{ eql: 'idea_id={{id}}' }],
+              columns: [
+                { title: 'When', dataIndex: 'created_at', sorter: true, width: '20%' },
+                { title: 'From', dataIndex: 'author_name', width: '20%' },
+                { title: 'Comment', dataIndex: 'body', width: '60%' }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    'board/:id/*': {
+      layout: 'full_width',
+      components: {
+        main: [
+          {
+            component: 'RecordForm',
+            properties: { table: 'post', title: 'Post' }
+          },
+          { component: 'Title', properties: { content: 'Replies' } },
+          {
+            component: 'RecordTable',
+            properties: {
+              table: 'post',
+              conditions: [{ eql: 'reply_to_id={{id}}' }],
+              columns: [
+                { title: 'When', dataIndex: 'created_at', sorter: true, width: '20%' },
+                { title: 'From', dataIndex: 'author_name', width: '20%' },
+                { title: 'Reply', dataIndex: 'body', width: '60%' }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "@mintphoenix/plugins",
+  "version": "1.3.0",
+  "type": "module",
+  "description": "Engine9 native plugins. Each directory with an index.js is one plugin, identity @mintphoenix/plugins/<dir>.",
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "peerDependencies": {
+    "@engine9/core": ">=1.3.0",
+    "@engine9/interfaces": ">=1.7.0"
+  },
+  "engine9": {
+    "pluginPackages": ["@mintphoenix/plugins"]
+  }
+}
