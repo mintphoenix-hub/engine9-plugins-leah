@@ -3,9 +3,9 @@
 
   Pure and storage-free, like mentions.js. Two kinds:
 
-    @group   names a set of people the host defines (@writers, @cast). A group tag notifies
+    @group   names a set of people the host defines (@managers, @staff). A group tag notifies
              every member, the way an @mention notifies one person.
-    #topic   labels the post (#props, #costumes). People follow a topic to hear about new
+    #topic   labels the post (#launch, #budget). People follow a topic to hear about new
              posts carrying it; anyone can filter the board by it.
 
   Both are stored as rows (`post_tag`), and whoever ends up notified is written as `mention`
@@ -47,8 +47,8 @@ export function parseHashtags(body) {
 }
 
 /* Which of the host's group tags a body names. `groups` is a list of names (or objects with a
-   `tag`). Same boundary rules as a mention, so "@writers" does not fire inside "@writersroom"
-   and an address like "a@cast.com" is not a tag. */
+   `tag`). Same boundary rules as a mention, so "@managers" does not fire inside "@managersroom"
+   and an address like "a@staff.com" is not a tag. */
 export function parseGroupTags(body, groups = []) {
   const text = fold(body);
   if (!text.includes('@')) return [];

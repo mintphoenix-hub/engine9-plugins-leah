@@ -74,7 +74,7 @@
       layout: 'full_width',
       components: {
         header: [
-          'Ideas for future events',
+          'Ideas',
           {
             component: 'Button',
             properties: {
@@ -118,9 +118,9 @@
                 type: 'object',
                 required: ['title'],
                 properties: {
-                  title: { type: 'string', title: 'Event or theme', default: '' },
+                  title: { type: 'string', title: 'Idea', default: '' },
                   timeframe: { type: 'string', title: 'Roughly when', default: '' },
-                  body: { type: 'string', title: 'The pitch', default: '' }
+                  body: { type: 'string', title: 'Details', default: '' }
                 }
               },
               uiSchema: { body: { 'ui:widget': 'textarea', 'ui:options': { rows: 4 } } },

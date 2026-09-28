@@ -1,30 +1,141 @@
 # Board Plugin
 
-`@mintphoenix/plugins/board`: a team message board. Threaded posts, emoji reactions, `@mentions`, per-person unread tracking, audience targeting, posts that hang off any other record, and an ideas list with votes and feedback. Built for any team app: nothing in it is specific to one host.
+`@mintphoenix/plugins/board`: a message board for any team application. Threaded posts, emoji reactions, `@mentions`, `@group` and `#topic` tags that notify, per-person unread tracking, audience targeting, posts that hang off any other record, and an ideas list with votes and feedback.
 
-A native plugin (`metadata.unique: true`, `metadata.prefix: 'board'`). Depends on `@engine9/interfaces/person`. On install core allocates the table prefix `board_<n>_` (for example `board_aaa_`), so the table names below are base names and the deployed names are `board_<n>_post` and so on. The prefix is stored on the `plugin` row's `table_prefix`; code that queries the tables reads it from there.
+It is a **native plugin** (`metadata.unique: true`, `metadata.prefix: 'board'`) that depends on `@engine9/interfaces/person`. It owns the schema, the settings, the console screens and the pure parsing logic. Everything that touches your users, your notifications and your identity stays in your application, so nothing in the plugin assumes a particular product.
+
+## Install
+
+1. Add the package to the site's `package.json`:
+
+   ```json
+   { "engine9": { "pluginPackages": ["@engine9/interfaces", "@mintphoenix/plugins"] } }
+   ```
+
+2. Rebuild the plugin registry and redeploy:
+
+   ```
+   npx e9core build-plugins
+   ```
+
+3. Install onto an account with MCP `plugin` `install` and `path: "@mintphoenix/plugins/board"`. Core deploys the tables, records the plugin row and inserts the [settings](#settings).
+
+### Table names and the prefix
+
+Core gives a native plugin a per-install table prefix, `board_<n>_`, where `<n>` is a counter in hex (for example `board_aaa_`). The names in this document are **base names**; the deployed names are `board_aaa_post`, `board_aaa_reaction` and so on. The prefix is stored on the plugin row, so read it from there rather than hard-coding it:
+
+```sql
+SELECT table_prefix FROM plugin WHERE path = '@mintphoenix/plugins/board';
+```
+
+If you deploy to a database core does not manage (for example plain SQLite, or D1 with hand-run migrations), generate the DDL from `board/schema.js` with core's `standardizeSchema` and `buildCreateTable`, using the prefix core would allocate, then insert the plugin row and the settings yourself.
 
 ## Data Model
 
 | Table | Purpose |
 | --- | --- |
-| `post` | A post or a reply. `reply_to_id` + `is_reply` make one level of threading; `last_activity_at` on the root moves when a reply lands. `audience_person_ids` (json) is null for everyone, otherwise the addressees. `context_table` + `context_id` attach a post to any record (an event, a prop, a show); `context_id` is a string so any key type works. `edited_at` marks an edit. `deleted_at` is a soft delete so replies keep their parent. `person_id` is the author; `author_name` is the display name at posting time and identifies authors who have no person record (`person_id` 0). |
+| `post` | A post or a reply. `reply_to_id` + `is_reply` give one level of threading; `last_activity_at` on the root moves when a reply lands. `audience_person_ids` (json) is null for everyone, otherwise the addressees. `context_table` + `context_id` attach a post to any record (an order, a campaign, a project); `context_id` is a string so any key type works. `pinned` floats a post. `edited_at` marks an edit. `deleted_at` is a soft delete so replies keep their parent. `person_id` is the author; `author_name` is the display name at posting time and identifies authors who have no person record (`person_id` 0). |
 | `reaction` | One row per person per emoji per post (unique `post_id, person_id, emoji`). |
-| `mention` | One row per person a post tells, as a `person_id`, never the text typed. `via_tag` is null when they were named directly, otherwise the tag that reached them (`@writers`, `#props`). `notified_at` records when they were told. One row per person per post. |
-| `post_tag` | The tags on a post: `kind` is `group` (`@writers`, notifies its members) or `topic` (`#props`, notifies followers). Unique per post and tag. |
-| `tag_follow` | A person following a topic: they are told of new posts carrying it. Unique per person and tag. |
-| `read_marker` | One row per person: `last_read_at`. A thread is new when any post in it is newer and not by the reader. |
-| `idea`, `idea_vote`, `idea_comment` | Pitches for future events with a rough `timeframe`, a `status`, thumbs-up votes and feedback comments. |
+| `mention` | One row per person a post tells, as a `person_id`, never the text typed. `via_tag` is null when they were named directly, otherwise the tag that reached them (`@managers`, `#launch`). `notified_at` records when they were told. One row per person per post. |
+| `post_tag` | The tags on a post. `kind` is `group` (`@managers`: notifies its members) or `topic` (`#launch`: notifies followers). Unique per post and tag. |
+| `tag_follow` | A person following a topic. Unique per person and tag. |
+| `read_marker` | One row per person: `last_read_at`. |
+| `idea`, `idea_vote`, `idea_comment` | Suggestions with a rough `timeframe`, a `status` (`Open`, `Picked up`, `Parked`, `Declined`), thumbs-up votes and feedback comments. |
 
-Authors, reactors, mentioned people and readers are engine9 `person_id`s.
+Authors, reactors, mentioned people, followers and readers are all engine9 `person_id`s.
 
-## Inbound Behavior
+## What the plugin provides, and what your application provides
 
-None. The plugin adds no people-pipeline transforms; rows are written by the host application.
+| The plugin | Your application |
+| --- | --- |
+| Tables, indexes, settings, console screens | Signing people in and mapping them to a `person_id` |
+| `mentions.js`: give people handles, find `@name`s in text, highlight them | The list of people who can be mentioned, and their display names |
+| `tags.js`: find `@group`s and `#topic`s, shape the rows | What each group means (who is in `@managers`) |
+| Row shapes: `mentionRows`, `tagRows`, `tagMentionRows` | Writing them, and the SQL that reads a thread |
+| | Delivery: the badge count, email, push |
+| | Who may edit or delete a post |
 
-## Outbound Behavior
+Everything exported from `index.js` is pure: no I/O, no globals, safe to run in a browser, a Worker or Node.
 
-None.
+```js
+import {
+  withHandles, parseMentions, findMentions, mentionRows,
+  parseHashtags, parseGroupTags, findTags, tagRows, tagMentionRows, normalizeTag,
+} from '@mintphoenix/plugins/board';
+```
+
+## Posting: the whole flow
+
+A host that follows these steps gets the plugin's behaviour, whatever its stack.
+
+1. **Validate** the body (non-empty, a sensible maximum length).
+2. **Find who is named.** Build the people list once per request and let the plugin choose handles:
+
+   ```js
+   const people = withHandles([
+     { id: 'u1', displayName: 'Ada Lovelace', firstName: 'Ada' },
+     { id: 'u2', displayName: 'Alan Turing',  firstName: 'Alan' },
+   ]);                                   // -> each gets a `handle` (Ada, Alan)
+   const named = parseMentions(body, people);          // -> ['u1']
+   ```
+
+3. **Find the tags.** Groups are the ones you define; topics are free-form:
+
+   ```js
+   const groups = parseGroupTags(body, ['everyone', 'managers']);   // -> ['managers']
+   const topics = parseHashtags(body);                              // -> ['launch']
+   ```
+
+4. **Work out who each tag reaches.** For a group, resolve its members with your own query. For a topic, select `person_id` from `tag_follow` where `tag` matches.
+5. **Attach a reply to the top-level post**, whichever message it answered, so stored threads stay one level deep. Reject a reply aimed at a post in a different thread (`context_table` + `context_id` must match). Set the root's `last_activity_at`.
+6. **Write, in one transaction:** the `post` row; a `mention` row per person named (from `mentionRows`); `post_tag` rows (from `tagRows`); and a `mention` row per person a tag reached (from `tagMentionRows`, which skips the author and anyone already named directly and writes a person reached two ways once, under the first tag that reached them).
+7. **Notify** the people you wrote `mention` rows for. The unread count needs no extra work: it is a query over `mention`.
+
+### Reading
+
+- **A thread:** select the posts for a `context_table` + `context_id` where `deleted_at IS NULL`, group replies under their `reply_to_id`, join `reaction` for counts and whether the viewer reacted, and `post_tag` for the tag chips.
+- **Highlighting** needs no server call: `findTags` and `findMentions` give text positions, and `MENTION_PATTERN` lets a composer highlight as you type without being handed the people list. The server still decides who was actually named.
+- **Filtering by topic:** keep a thread if any post in it carries the tag; a reply that says `#launch` belongs with the post it answers.
+- **Unread mentions:**
+
+  ```sql
+  SELECT COUNT(*) FROM <prefix>mention m JOIN <prefix>post p ON p.id = m.post_id
+   WHERE m.person_id = :me AND p.deleted_at IS NULL
+     AND p.created_at > :last_read AND p.person_id <> :me;
+  ```
+
+- **Unread board** (optional): a thread is new when any post in it is newer than the reader's `read_marker.last_read_at` and not written by them.
+
+## Mentions
+
+`handleFor` chooses what someone types after the `@`: their first name, falling back to their display name with the spaces removed, and a second person who shares a first name gets their display name instead so two people never answer to the same handle. Matching rules, all covered by `mentions.test.mjs`:
+
+- the longest handle wins (`@MaryAnne` is never read as `@Mary`);
+- a mention ends at a word boundary (`@Meg` does not fire inside `@Megan`);
+- an email address is not a mention (`someone@example.com`);
+- case and accents are ignored (`@jose` finds José).
+
+A mention is **stored as a person id, never as the text someone typed**. That keeps names out of anything you might later export, and it means renaming a person cannot orphan a mention.
+
+## Tags
+
+- **`@group`** notifies every member of a group your application defines: `@everyone`, `@managers`, whatever suits the team. Membership should be a live query, so a new member is reached by the next tag with nothing to keep in step.
+- **`#topic`** files a post under a topic. People follow a topic to be told of new posts in it; anyone can filter the board by one.
+
+Tag names are lower-case ASCII letters, digits, `_` and `-`, starting with a letter, at most 40 characters, with accents folded (`#Café` is `#cafe`), so a tag is always safe in a URL. An HTML entity (`&#39;`), a URL fragment (`page#top`), `C#` and `room #12` are not topics; `a@staff.com` is not a group.
+
+## Notification semantics
+
+| Someone is told when | Recorded as |
+| --- | --- |
+| a post names them (`@Ada`) | `mention` row, `via_tag` null |
+| a post tags a group they are in | `mention` row, `via_tag = '@managers'` |
+| a post carries a topic they follow | `mention` row, `via_tag = '#launch'` |
+
+- Never the author, about their own post.
+- Once per post, however many ways they were reached; a direct mention is never re-credited to a tag.
+- A reply may also tell the root's author and earlier repliers; the plugin does not write those rows, so add them if you want that behaviour.
+- Whether a `mention` row becomes an email or a push, and honouring an opt-out, is the host's decision.
 
 ## Search
 
@@ -38,21 +149,43 @@ None.
 
 None.
 
+## Inbound Behavior
+
+None. The plugin adds no people-pipeline transforms; rows are written by the host application.
+
+## Outbound Behavior
+
+None.
+
 ## Reports and UI
 
-No reports. `ui.console.json5` adds a **Board** menu: Posts (top-level threads, latest activity first, open one for its replies), New post, Ideas, Suggest an idea, and an idea page with its feedback.
+No reports. `ui.console.json5` adds a **Board** menu to the engine9 console: Posts (top-level threads, latest activity first; open one for its replies), New post, Ideas, Suggest an idea, and an idea page with its feedback. The console screens are a plain record view. A conversation view with reactions and live composing is the host application's to draw.
 
 ## Settings
+
+Declared in `settings.js`, inserted per install on first install, changed later with MCP `plugin` `setSetting`.
 
 | Name | Type | Default | Purpose |
 | --- | --- | --- | --- |
 | `allow_edit` | boolean | true | Authors may edit their own posts, ideas and comments. |
 | `moderator_delete` | boolean | true | Admins may remove any post; otherwise only the author. |
 | `mention_notifications` | boolean | true | Tell people directly when a post names them. |
-| `reaction_emoji` | string | `👍,❤️,😂,🎉,👀` | Comma-separated emoji offered as reactions. |
+| `reaction_emoji` | string | `👍,❤️,😂,🎉,👀` | Comma-separated emoji offered as reactions. Validate incoming reactions against it. |
 
-## Behaviour the host implements
+## Tests
 
-`tags.js` does the same for tags: `parseHashtags`, `parseGroupTags`, `findTags`, `tagRows`, `tagMentionRows`. Group definitions (who is in `@writers`) belong to the host; the plugin only finds the tags and shapes the rows. On post: write `post_tag` rows; work out who each group and each topic's followers are; write `mention` rows for them with `via_tag`, skipping the author and anyone already named directly.
+The parsing logic has no dependencies:
 
-`mentions.js` handles the matching — handles, collisions, and the edge cases (an email address is not a mention; a shorter handle never eats a longer one). Unread badges, thread ordering, permission checks and notification delivery stay application behaviour, not schema. On post: set `is_reply`; write a `mention` row per person named; on a reply, attach it to the top-level ancestor and update the root's `last_activity_at`. Notify mentioned people directly; on a reply, the root's author and earlier repliers.
+```
+node board/mentions.test.mjs
+node board/tags.test.mjs
+```
+
+## Versions
+
+- **1.3.0**: `@group` and `#topic` tags (`tags.js`, `post_tag`, `tag_follow`, `mention.via_tag`).
+- **1.2.0**: `mentions.js`: handle assignment and matching.
+- **1.1.0**: `post.deleted_at` (soft delete); `post.context_id` is a string.
+- **1.0.0**: the schema.
+
+Upgrading adds tables and columns only; nothing is renamed or removed.

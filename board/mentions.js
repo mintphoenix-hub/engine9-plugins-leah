@@ -32,7 +32,8 @@ const escapeRe = (v) => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
    Somebody with no first name recorded gets the first word of their display name — "Alex
    Fontaine" answers to @Alex — which is what a team already calls them. `isCrew` marks the
-   people a host keeps as names rather than accounts; they are handled the same way. */
+   people a host keeps as names rather than accounts (contractors, volunteers, external
+   collaborators); they are handled the same way. */
 export function handleFor(person, taken = new Set()) {
   const first = (person.firstName || '').trim();
   const display = String(person.displayName || person.stageName || person.name || '').trim();

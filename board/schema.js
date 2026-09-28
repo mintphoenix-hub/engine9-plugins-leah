@@ -3,16 +3,16 @@
  * plugin's table_prefix (metadata.prefix `board`, e.g. board_aaa_post).
  *
  * A post is a row in `post`. A reply is a post with reply_to_id set
- * (one level of threading, like the source app): the root post shows its replies
+ * (one level of threading): the root post shows its replies
  * underneath, and a new reply brings its thread back to the top via
  * post.last_activity_at on the root.
  *
  * Audience: audience_person_ids is null/empty for "everyone"; otherwise a JSON
  * array of person ids the post is addressed to.
  *
- * Context: a post can hang off any other record (an event, a campaign, a
- * project) via context_table + context_id — the source app used this for
- * per-event notes that also appear on the main board, tagged with the event.
+ * Context: a post can hang off any other record (an order, a campaign, a
+ * project) via context_table + context_id, so a thread can live on that record's
+ * page and, if the host wants, also appear on a main board tagged with it.
  *
  * Unread: read_marker keeps one last_read_at per person; a thread is new when any
  * post in it is newer than that and not by the reader.
@@ -28,7 +28,7 @@ export const tables = [
       reply_to_id: { type: 'foreign_uuid', description: 'Parent post; null for a top-level post' },
       is_reply: { type: 'boolean', nullable: false, default_value: false },
       audience_person_ids: { type: 'json', description: 'null = everyone, otherwise array of person ids' },
-      context_table: { type: 'string', description: 'Optional table this post is about, e.g. event' },
+      context_table: { type: 'string', description: 'Optional table this post is about, e.g. project' },
       context_id: { type: 'string', description: 'Key of the optional record this post is about (any key type)' },
       pinned: { type: 'boolean', nullable: false, default_value: false },
       edited_at: { type: 'datetime', description: 'Set when the author edits after posting' },
@@ -67,7 +67,7 @@ export const tables = [
       id: 'id_uuid',
       post_id: 'foreign_uuid',
       person_id: { type: 'person_id', description: 'The person who was told: @mentioned, in a tagged group, or following a tagged topic' },
-      via_tag: { type: 'string', description: 'Null when named directly; otherwise the tag that reached them, e.g. @writers or #props' },
+      via_tag: { type: 'string', description: 'Null when named directly; otherwise the tag that reached them, e.g. @managers or #launch' },
       notified_at: { type: 'datetime', description: 'When they were told directly' },
       created_at: 'created_at'
     },
@@ -83,7 +83,7 @@ export const tables = [
       id: 'id_uuid',
       post_id: 'foreign_uuid',
       tag: { type: 'string', nullable: false, description: 'Lower-case name without the @ or #' },
-      kind: { type: 'string', nullable: false, default_value: 'topic', values: ['group', 'topic'], description: 'group = @writers (notifies its members); topic = #props (notifies followers)' },
+      kind: { type: 'string', nullable: false, default_value: 'topic', values: ['group', 'topic'], description: 'group = @managers (notifies its members); topic = #launch (notifies followers)' },
       created_at: 'created_at'
     },
     indexes: [
@@ -123,11 +123,11 @@ export const tables = [
     name: 'idea',
     columns: {
       id: 'id_uuid',
-      person_id: { type: 'person_id', description: 'Who pitched it' },
+      person_id: { type: 'person_id', description: 'Who suggested it' },
       author_name: 'string',
       title: { type: 'string', nullable: false },
       timeframe: { type: 'string', description: 'Rough timing, e.g. late spring, around Halloween' },
-      body: { type: 'text', description: 'The pitch' },
+      body: { type: 'text', description: 'The details' },
       status: {
         type: 'string',
         nullable: false,
