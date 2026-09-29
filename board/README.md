@@ -78,6 +78,7 @@ import {
 | `toSqlTime(ms)` / `fromSqlTime(text)` | Epoch milliseconds to and from the plugin's datetime text (UTC, with a fractional second). Text with no zone is read as UTC. |
 | `parseReactionList(value, fallback)` | The `reaction_emoji` setting (one comma-separated string) as a list. |
 | `addedMentions(before, after, people)` (in `mentions.js`) | The people an edit newly names, so adding `@Ada` tells Ada and fixing a typo tells nobody. |
+| `mentionQuery` / `suggestMentions` / `applyMention` (in `mentions.js`) | The `@` picker: is the caret after `@partial`, who to offer (prefix, case- and accent-insensitive, not someone already typed out, `exclude` drops the author), and the text with the chosen handle written in. The host draws the list and owns the keys. |
 
 ### Ordering
 
@@ -203,8 +204,9 @@ node board/helpers.test.mjs
 
 ## Versions
 
-The version is the npm package version in `package.json` (currently 2.0.0), which covers the whole package. Nothing else records it.
+The version is the npm package version in `package.json` (currently 2.1.0), which covers the whole package. Nothing else records it.
 
+- **2.1.0**: composer helpers in `mentions.js` — `mentionQuery(text, caret)`, `suggestMentions(query, people, {limit, exclude})`, `applyMention(text, caret, mention, handle)` — so every host's `@` picker suggests exactly what the server will match. No schema change.
 - **2.0.0** (breaking): tables are self-scoped (`mintphoenix_board_post`, ...) and the plugin no longer sets `metadata.prefix`, per the engine9 plugin guidelines. `metadata.version` is removed. `tableNames()` returns the new names. Requires `@engine9/core` >= 1.4.0 and `@engine9/interfaces` >= 1.8.0. Existing installs must run `migrate-2.0.0.sql` first.
 - **1.6.0**: `helpers.js` (`tableNames`, `ORDER_OLDEST_FIRST`, `canonicalId`, `uuidFor`, `isUuid`, `toSqlTime`, `fromSqlTime`, `parseReactionList`, `DEFAULT_REACTIONS`) and `addedMentions`: the pieces every host was writing for itself. Documented the timestamp-tie ordering rule.
 - **1.5.0**: `handleFor` reads only `displayName` (falling back to `name`); any other name field is ignored. Pass the name you show for someone as `displayName`.

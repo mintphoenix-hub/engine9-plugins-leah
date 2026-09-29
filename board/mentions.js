@@ -122,4 +122,40 @@ export function addedMentions(beforeBody, afterBody, people = []) {
   return parseMentions(afterBody, people).filter((id) => !had.has(id));
 }
 
-export default { handleFor, withHandles, parseMentions, findMentions, mentionRows, addedMentions, MENTION_PATTERN };
+/* ---- the composer: suggesting a name after "@" ---------------------------------------------
+   The same rules as matching, applied while somebody is still typing, so every host's picker
+   offers what the server will actually recognise. Pure: text and a caret in, a suggestion or a
+   new text and caret out. The host draws the list and owns the keys. */
+
+/* Is the caret sitting right after "@partial"? Returns { start, query } — `start` is where the
+   "@" is — or null. An "@" that follows a word character (an email address) is not a mention. */
+export function mentionQuery(text, caret = String(text || '').length) {
+  const upto = String(text || '').slice(0, caret);
+  const m = /(^|[^\w@.-])@([\p{L}][\p{L}\p{N} _-]{0,39}|)$/u.exec(upto);
+  return m ? { start: upto.length - m[2].length - 1, query: m[2] } : null;
+}
+
+/* Who to offer for what has been typed after the "@". `people` is `[{id, handle}]`. Prefix match,
+   case- and accent-insensitive; someone already typed out in full is not offered again, and
+   `exclude` (ids) drops people such as the author. */
+export function suggestMentions(query, people = [], { limit = 5, exclude = [] } = {}) {
+  const q = fold(query);
+  const skip = new Set(exclude);
+  const seen = new Set();
+  return people
+    .filter((p) => p && p.handle && !skip.has(p.id) && !seen.has(fold(p.handle)) && seen.add(fold(p.handle)))
+    .filter((p) => fold(p.handle).startsWith(q) && fold(p.handle) !== q)
+    .sort((a, b) => a.handle.length - b.handle.length || fold(a.handle).localeCompare(fold(b.handle)))
+    .slice(0, limit);
+}
+
+/* Write the chosen handle in place of what was typed: "@Ad" becomes "@Ada ". Returns the new
+   text and where the caret belongs. */
+export function applyMention(text, caret, mention, handle) {
+  const before = String(text || '').slice(0, mention.start);
+  const after = String(text || '').slice(caret);
+  const inserted = `@${handle} `;
+  return { text: before + inserted + after, caret: before.length + inserted.length };
+}
+
+export default { handleFor, withHandles, parseMentions, findMentions, mentionRows, addedMentions, mentionQuery, suggestMentions, applyMention, MENTION_PATTERN };

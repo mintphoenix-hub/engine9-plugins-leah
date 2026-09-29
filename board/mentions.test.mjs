@@ -37,3 +37,26 @@ ck('removing a name tells nobody', addedMentions('hi @Mary @Joanna', 'hi @Mary',
 ck('the first mention on a post that had none', addedMentions('hello', 'hello @Mary', people).join()==='mary');
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail?1:0);
+
+/* ---- composer helpers ---- */
+{
+  const { mentionQuery, suggestMentions, applyMention } = await import('./mentions.js');
+  const eq = (await import('node:assert/strict')).default.deepEqual;
+  const people = [{ id: 1, handle: 'Ada' }, { id: 2, handle: 'Adam' }, { id: 3, handle: 'Megan' }, { id: 4, handle: 'José' }];
+
+  eq(mentionQuery('hi @Ad'), { start: 3, query: 'Ad' });
+  eq(mentionQuery('hi @'), { start: 3, query: '' });
+  eq(mentionQuery('@Ada and @Me', 12), { start: 9, query: 'Me' });
+  eq(mentionQuery('mail someone@example'), null, 'an address is not a mention');
+  eq(mentionQuery('hi @Ada, ok'), null, 'the caret has moved on');
+  eq(mentionQuery('hi @Ad|min', 6), { start: 3, query: 'Ad' }, 'only what is before the caret counts');
+
+  eq(suggestMentions('a', people).map((p) => p.id), [1, 2]);
+  eq(suggestMentions('jo', people).map((p) => p.id), [4], 'accent-insensitive');
+  eq(suggestMentions('ada', people).map((p) => p.id), [2], 'a fully typed name is not offered again, longer ones still are');
+  eq(suggestMentions('', people, { limit: 2 }).length, 2);
+  eq(suggestMentions('a', people, { exclude: [1] }).map((p) => p.id), [2], 'the author can be left out');
+
+  const q = mentionQuery('hi @Ad there', 6);
+  eq(applyMention('hi @Ad there', 6, q, 'Ada'), { text: 'hi @Ada  there', caret: 8 });
+}
