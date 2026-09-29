@@ -1,0 +1,52 @@
+# Tests the plugins on every push, and every day against the NEWEST engine9 core.
+#
+# package.json asks for core straight from its repository (no fixed version) and there is no
+# lockfile on purpose, so each run installs whatever core and @engine9/interfaces are current. If a
+# core release breaks a plugin, this fails the morning it happens and opens an issue, instead of a
+# site finding out when it next updates.
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 19 * * *'   # daily, about 5 in the morning in Brisbane
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install (newest core on purpose)
+        run: npm install --no-audit --no-fund
+      - name: Which core?
+        run: |
+          node -e "console.log('core', require('./node_modules/@engine9/core/package.json').version)"
+          git ls-remote https://github.com/engine9-ai/core.git HEAD
+      - name: Test
+        run: npm test
+      - name: Open (or update) an issue if the daily run broke
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create core-compat --color B04A4A --description "A new engine9 core broke a plugin" 2>/dev/null || true
+          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          existing=$(gh issue list --label core-compat --state open --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "Still failing against the newest core: $url"
+          else
+            gh issue create --label core-compat --title "Plugins fail against the newest engine9 core" \
+              --body "The daily run failed: $url
+
+          Fix the plugin, or pin core until it is fixed. Sites are not affected until they update."
+          fi

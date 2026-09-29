@@ -59,6 +59,8 @@ node board/webpush.test.mjs
 node board/helpers.test.mjs
 ```
 
+`node core.test.mjs` (or `npm test`, which runs everything) installs each plugin into a scratch in-memory database with core's own `PluginWorker` and passes the schema through core's SQLite and MySQL dialects. It needs the dev dependencies (`npm install`), which take the **newest** `@engine9/core` on purpose and have no lockfile. GitHub Actions (`.github/workflows/test.yml`) runs it on every push and once a day, and opens a `core-compat` issue if a new core release breaks a plugin. That is how this package finds out about core changes before a site does.
+
 Do not start HTTP servers or apply anything to a shared database unless the person asked.
 
 ## Pitfalls that have already happened

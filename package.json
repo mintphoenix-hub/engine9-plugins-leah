@@ -15,5 +15,15 @@
     "pluginPackages": [
       "@mintphoenix/plugins"
     ]
+  },
+  "devDependencies": {
+    "@engine9/core": "git+https://github.com/engine9-ai/core.git",
+    "@engine9/interfaces": "^1.8.0",
+    "mysql2": "^3.0.0",
+    "knex": "^3.3.0",
+    "better-sqlite3": "^13.0.3"
+  },
+  "scripts": {
+    "test": "node ai-writing-assist/prompt.test.mjs && node ai-writing-assist/assist.test.mjs && node ai-writing-assist/upgrade.test.mjs && node board/mentions.test.mjs && node board/tags.test.mjs && node board/notifications.test.mjs && node board/push.test.mjs && node board/webpush.test.mjs && node board/helpers.test.mjs && node core.test.mjs"
   }
 }
