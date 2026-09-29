@@ -49,6 +49,7 @@ The helpers have no dependencies:
 ```
 node board/mentions.test.mjs
 node board/tags.test.mjs
+node board/notifications.test.mjs
 node board/helpers.test.mjs
 ```
 
