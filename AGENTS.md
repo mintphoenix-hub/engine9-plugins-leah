@@ -18,6 +18,7 @@ Read [`board/README.md`](board/README.md) first. It is the contract: data model,
 - **A mention is stored as an id, never as the text typed.** `mention.person_id`, not a name. That keeps names out of anything exported and stops a rename orphaning a mention.
 - **Notification rows are `mention` rows.** A person named directly has `via_tag` null; a person reached by a group or a followed topic has `via_tag` set (`@managers`, `#launch`). One row per person per post. The author is never told about their own post. The unread count is a query over `mention`; do not build a second path.
 - **Threads are one level deep.** Attach a reply to the top-level post whichever message it answered, and only within the same `context_table` + `context_id`. Move the root's `last_activity_at` when a reply lands.
+- **Order by `created_at, rowid`** (`ORDER_OLDEST_FIRST`). Timestamps default to whole seconds, so rows written together tie; `rowid` is insertion order. Use the helpers in `helpers.js` (`tableNames`, `canonicalId`, `toSqlTime`, `fromSqlTime`, `parseReactionList`) instead of writing them again.
 - **Delete softly.** Set `post.deleted_at`. A reply must not lose its parent.
 - **`context_table` + `context_id` is the link to any other record.** `context_id` is a string so any key type works. Do not add a foreign key to a host table.
 - **Groups are the host's.** `parseGroupTags` finds a group name; the host decides who is in it, as a live query, so nobody has to keep a list in step.
@@ -48,6 +49,7 @@ The helpers have no dependencies:
 ```
 node board/mentions.test.mjs
 node board/tags.test.mjs
+node board/helpers.test.mjs
 ```
 
 Do not start HTTP servers or apply anything to a shared database unless the person asked.

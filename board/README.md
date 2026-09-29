@@ -61,10 +61,27 @@ Everything exported from `index.js` is pure: no I/O, no globals, safe to run in 
 
 ```js
 import {
-  withHandles, parseMentions, findMentions, mentionRows,
+  withHandles, parseMentions, findMentions, mentionRows, addedMentions,
   parseHashtags, parseGroupTags, findTags, tagRows, tagMentionRows, normalizeTag,
+  tableNames, ORDER_OLDEST_FIRST, canonicalId, uuidFor, isUuid,
+  toSqlTime, fromSqlTime, parseReactionList,
 } from '@mintphoenix/plugins/board';
 ```
+
+### Helpers (`helpers.js`)
+
+| Helper | What it does |
+| --- | --- |
+| `tableNames(prefix)` | The deployed table names for an install: `tableNames('board_aaa_').post === 'board_aaa_post'`. Pass the `table_prefix` from the plugin row. |
+| `ORDER_OLDEST_FIRST` | `'created_at, rowid'`. Use it wherever order is shown (see [Ordering](#ordering)). |
+| `canonicalId(id)` / `uuidFor(seed)` / `isUuid(v)` | Map an id a system already has onto the plugin's uuid, deterministically. A uuid is kept; anything else always gives the same uuid, so a retried write cannot double and a client holding its own id finds the row. |
+| `toSqlTime(ms)` / `fromSqlTime(text)` | Epoch milliseconds to and from the plugin's datetime text (UTC, with a fractional second). Text with no zone is read as UTC. |
+| `parseReactionList(value, fallback)` | The `reaction_emoji` setting (one comma-separated string) as a list. |
+| `addedMentions(before, after, people)` (in `mentions.js`) | The people an edit newly names, so adding `@Ada` tells Ada and fixing a typo tells nobody. |
+
+### Ordering
+
+`created_at` is a SQLite datetime, whole seconds by default, so rows written together (several reactions, a post and its first reply) share a value and their order is otherwise undefined. Order anything shown to people by `ORDER_OLDEST_FIRST` (`created_at, rowid`): `rowid` is insertion order and breaks the tie. A host that wants exact order across writes can also stamp `created_at` itself with `toSqlTime`, which keeps milliseconds.
 
 ## Posting: the whole flow
 
@@ -185,6 +202,7 @@ node board/tags.test.mjs
 
 ## Versions
 
+- **1.6.0**: `helpers.js` (`tableNames`, `ORDER_OLDEST_FIRST`, `canonicalId`, `uuidFor`, `isUuid`, `toSqlTime`, `fromSqlTime`, `parseReactionList`, `DEFAULT_REACTIONS`) and `addedMentions`: the pieces every host was writing for itself. Documented the timestamp-tie ordering rule.
 - **1.5.0**: `handleFor` reads only `displayName` (falling back to `name`); any other name field is ignored. Pass the name you show for someone as `displayName`.
 - **1.4.0**: `isCrew` is now `isExternal` in `handleFor` / `withHandles`: a person the host keeps as a name rather than an account (contractor, volunteer, external collaborator) is addressed by the first word of their display name. Rename the flag when upgrading; there is no alias.
 - **1.3.0**: `@group` and `#topic` tags (`tags.js`, `post_tag`, `tag_follow`, `mention.via_tag`).

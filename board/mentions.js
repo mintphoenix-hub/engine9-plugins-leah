@@ -114,4 +114,12 @@ export function mentionRows(postId, mentionedIds = [], personIdOf = (x) => x) {
   return rows;
 }
 
-export default { handleFor, withHandles, parseMentions, findMentions, mentionRows, MENTION_PATTERN };
+/* The people an EDIT newly names: in the new body and not in the old one. Editing a post to add
+   "@Ada" should tell Ada, and tidying a typo should not tell everyone again. Returns ids, in the
+   order parseMentions gives them. */
+export function addedMentions(beforeBody, afterBody, people = []) {
+  const had = new Set(parseMentions(beforeBody, people));
+  return parseMentions(afterBody, people).filter((id) => !had.has(id));
+}
+
+export default { handleFor, withHandles, parseMentions, findMentions, mentionRows, addedMentions, MENTION_PATTERN };
