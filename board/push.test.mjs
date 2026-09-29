@@ -104,6 +104,9 @@ console.log('\nbuilding and sending:');
   ck('one bad device does not stop the rest', hits.length === 3);
   const boom = await sendPushes(live, vapid, { fetchImpl: async () => { throw new Error('network'); } });
   ck('a thrown network error is a failure, not a crash', boom.sent === 0 && boom.failed === 3);
+  let ttlSent;
+  await sendPushes(live.slice(0, 1), vapid, { ttl: 0, fetchImpl: async (url, init) => { ttlSent = init.headers.TTL; return { status: 201 }; } });
+  ck('a ttl of 0 is sent as 0, not the default', ttlSent === '0', ttlSent);
   ck('nothing to send is not an error', (await sendPushes([], vapid)).sent === 0);
 }
 

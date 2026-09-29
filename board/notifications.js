@@ -18,6 +18,7 @@
 */
 import { tagMentionRows } from './tags.js';
 import { tableNames } from './helpers.js';
+import { oneLine } from './text.js';
 
 export const EVERYONE_TAG = '@everyone';
 
@@ -81,9 +82,7 @@ export function notificationPlan(rows = [], settings = {}) {
 export function notificationText(post = {}, viaTag = null, max = 140) {
   const who = String(post.author_name || '').trim() || 'Someone';
   const title = !viaTag ? `${who} mentioned you` : viaTag === EVERYONE_TAG ? `${who} posted to everyone` : `${who} posted to ${viaTag}`;
-  const flat = String(post.body || '').replace(/\s+/g, ' ').trim();
-  const body = flat.length > max ? `${flat.slice(0, Math.max(0, max - 1)).trimEnd()}…` : flat;
-  return { title, body };
+  return { title, body: oneLine(post.body, max) };
 }
 
 /* The badge: how many unread posts told this person, as SQL. Bind :me (person_id) and

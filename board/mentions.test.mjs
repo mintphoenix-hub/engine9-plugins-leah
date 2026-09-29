@@ -28,6 +28,16 @@ console.log('\nhighlighting:');
 const hits = findMentions('hi @Mary and @Joanna', people);
 ck('two spans found', hits.length===2, JSON.stringify(hits.map(h=>h.handle)));
 ck('spans line up with the text', 'hi @Mary and @Joanna'.slice(hits[0].start,hits[0].end)==='@Mary');
+{
+  const t = 'Cafe\u0301 with @Mary and @Joanna';   // the accent typed as its own character
+  const h = findMentions(t, people);
+  ck('spans line up after a separately typed accent', h.map((x) => t.slice(x.start, x.end)).join() === '@Mary,@Joanna', JSON.stringify(h));
+  const u = 'İİ @Mary';                             // lower-cases to more characters
+  ck('spans line up after a letter that folds longer', findMentions(u, people).map((x) => u.slice(x.start, x.end)).join() === '@Mary');
+  const v = 'hi @Jose\u0301';
+  const jose = [{ id: 'j', handle: 'José' }];
+  ck('a span keeps the accent at the end of a name', findMentions(v, jose).map((x) => v.slice(x.start, x.end)).join() === '@Jose\u0301');
+}
 ck('the generic pattern finds an @word', [...('ping @somebody').matchAll(MENTION_PATTERN)].length===1);
 ck('and ignores an email', [...('a@b.com').matchAll(MENTION_PATTERN)].length===0);
 console.log('\nedits:');
@@ -35,8 +45,6 @@ ck('an edit that adds a name tells only that person', addedMentions('hi @Mary', 
 ck('fixing a typo tells nobody', addedMentions('hi @Mary', 'hi @Mary!', people).length===0);
 ck('removing a name tells nobody', addedMentions('hi @Mary @Joanna', 'hi @Mary', people).length===0);
 ck('the first mention on a post that had none', addedMentions('hello', 'hello @Mary', people).join()==='mary');
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail?1:0);
 
 /* ---- composer helpers ---- */
 {
@@ -59,4 +67,7 @@ process.exit(fail?1:0);
 
   const q = mentionQuery('hi @Ad there', 6);
   eq(applyMention('hi @Ad there', 6, q, 'Ada'), { text: 'hi @Ada  there', caret: 8 });
+  ck('composer helpers', true);
 }
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail?1:0);

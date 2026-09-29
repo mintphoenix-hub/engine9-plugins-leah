@@ -16,18 +16,21 @@
   the id is the fact, the spelling is just what one person typed once.
 */
 
-/* Fold case and accents so "José" matches "@jose". Kept to the characters a handle can hold. */
-const fold = (v) => String(v == null ? '' : v)
-  .normalize('NFD').replace(/[̀-ͯ]/g, '')
-  .toLowerCase();
+import { fold, foldWithMap, AT_BOUNDARY } from './text.js';
 
 const escapeRe = (v) => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/* People with a handle, longest handle first, so "@MaryAnne" is never consumed by a shorter "@Mary". */
+const byLongestHandle = (people) => people.filter((p) => p && p.handle).sort((a, b) => b.handle.length - a.handle.length);
+
+/* "@handle" as a whole mention: not inside an email address, not the start of a longer name. */
+const handleRe = (handle, flags) => new RegExp(`${AT_BOUNDARY}@${escapeRe(fold(handle))}(?![\\w-])`, flags);
 
 /* What somebody types after the @.
 
    A first name where there is one, because that is what people call each other. It falls back
    to the display name with the spaces taken out, which is unambiguous by construction when
-   display names are unique. `taken` is the handles already used: a second Julia gets her
+   display names are unique. `taken` is the handles already used: a second Julia gets their
    display name instead, so two people never answer to the same @.
 
    Somebody with no first name recorded gets the first word of their display name — "Alex
@@ -64,13 +67,8 @@ export function parseMentions(body, people = []) {
   const text = fold(body);
   if (!text.includes('@')) return [];
   const found = new Set();
-  // Longest first: "@MaryAnne" must not be consumed by a shorter "@Mary".
-  const byLength = [...people].filter((p) => p && p.handle).sort((a, b) => b.handle.length - a.handle.length);
-  for (const p of byLength) {
-    /* (^|[^\w@.-]) keeps an email address from reading as a mention: the character before the
-       @ in "someone@example.com" is a word character, so it never starts one. */
-    const re = new RegExp(`(^|[^\\w@.-])@${escapeRe(fold(p.handle))}(?![\\w-])`);
-    if (re.test(text)) found.add(p.id);
+  for (const p of byLongestHandle(people)) {
+    if (handleRe(p.handle).test(text)) found.add(p.id);
   }
   return [...found];
 }
@@ -78,16 +76,14 @@ export function parseMentions(body, people = []) {
 /* Where the mentions are in the text, for highlighting. Returns [{start, end, handle, id}].
    Overlaps are resolved the same way parseMentions resolves them: longest handle wins. */
 export function findMentions(body, people = []) {
-  const text = String(body || '');
-  const folded = fold(text);
+  const { folded, at } = foldWithMap(body);
   const out = [];
-  const byLength = [...people].filter((p) => p && p.handle).sort((a, b) => b.handle.length - a.handle.length);
-  for (const p of byLength) {
-    const re = new RegExp(`(^|[^\\w@.-])@${escapeRe(fold(p.handle))}(?![\\w-])`, 'g');
+  for (const p of byLongestHandle(people)) {
+    const re = handleRe(p.handle, 'g');
     let m;
     while ((m = re.exec(folded)) !== null) {
-      const start = m.index + m[1].length;
-      const end = start + 1 + p.handle.length;
+      const start = at[m.index + m[1].length];
+      const end = at[m.index + m[0].length];
       if (!out.some((o) => start < o.end && end > o.start)) out.push({ start, end, handle: p.handle, id: p.id });
     }
   }
@@ -142,9 +138,15 @@ export function suggestMentions(query, people = [], { limit = 5, exclude = [] } 
   const q = fold(query);
   const skip = new Set(exclude);
   const seen = new Set();
-  return people
-    .filter((p) => p && p.handle && !skip.has(p.id) && !seen.has(fold(p.handle)) && seen.add(fold(p.handle)))
-    .filter((p) => fold(p.handle).startsWith(q) && fold(p.handle) !== q)
+  const out = [];
+  for (const p of people) {
+    if (!p || !p.handle || skip.has(p.id)) continue;
+    const h = fold(p.handle);
+    if (seen.has(h)) continue;
+    seen.add(h);
+    if (h.startsWith(q) && h !== q) out.push(p);
+  }
+  return out
     .sort((a, b) => a.handle.length - b.handle.length || fold(a.handle).localeCompare(fold(b.handle)))
     .slice(0, limit);
 }

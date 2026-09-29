@@ -28,6 +28,7 @@
 */
 import { tableNames } from './helpers.js';
 import { sendPush } from './webpush.js';
+import { oneLine } from './text.js';
 
 const uniq = (xs) => [...new Set((xs || []).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
 
@@ -64,8 +65,6 @@ export function pushRecipients({
   return out;
 }
 
-const clip = (s, n) => { const t = String(s || '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
-
 /* The words of a push: {title, body}. `tag` is what reached the person ('@managers', '#launch');
    `boardName` is what to call the board in a general notice ("Ada posted on the team board"). */
 export function pushMessage(kind, { from = '', body = '', tag = '', boardName = 'the board', max = 140 } = {}) {
@@ -74,7 +73,7 @@ export function pushMessage(kind, { from = '', body = '', tag = '', boardName = 
     : kind === 'tag' ? `${who} posted to ${tag || 'a tag you follow'}`
       : kind === 'reply' ? `${who} replied`
         : `${who} posted on ${boardName}`;
-  return { title, body: clip(body, max) };
+  return { title, body: oneLine(body, max) };
 }
 
 /* ---- devices ---------------------------------------------------------------------------- */
@@ -155,7 +154,7 @@ export async function sendPushes(pushes, vapid, { fetchImpl, ttl } = {}) {
     try {
       const r = await sendPush(vapid, p.subscription, p.message, {
         urgency: p.urgency,
-        ...(ttl ? { ttl } : {}),
+        ...(ttl != null ? { ttl } : {}),
         ...(fetchImpl ? { fetchImpl } : {})
       });
       if (r.ok) sent += 1; else failed += 1;

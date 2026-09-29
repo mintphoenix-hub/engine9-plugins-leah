@@ -69,9 +69,10 @@ Everything exported from `index.js` is pure: no I/O, no globals, safe to run in 
 
 ```js
 import {
-  withHandles, parseMentions, findMentions, mentionRows, addedMentions,
+  withHandles, parseMentions, findMentions, mentionRows, addedMentions, MENTION_PATTERN,
+  mentionQuery, suggestMentions, applyMention,
   parseHashtags, parseGroupTags, findTags, tagRows, tagMentionRows, normalizeTag,
-  everyoneMentionRows, notificationPlan, notificationText, unreadBadgeSql, isEveryone,
+  EVERYONE_TAG, everyoneMentionRows, notificationPlan, notificationText, unreadBadgeSql, isEveryone,
   tableNames, ORDER_OLDEST_FIRST, canonicalId, uuidFor, isUuid,
   toSqlTime, fromSqlTime, parseReactionList,
 } from '@mintphoenix/plugins/board';
@@ -243,7 +244,7 @@ Declared in `settings.js`, inserted per install on first install, changed later 
 
 | Name | Type | Default | Purpose |
 | --- | --- | --- | --- |
-| `allow_edit` | boolean | true | Authors may edit their own posts, ideas and comments. |
+| `allow_edit` | boolean | true | Authors may edit their own posts, replies, ideas and comments. |
 | `moderator_delete` | boolean | true | Admins may remove any post; otherwise only the author. "Admin" is the host's decision. With core 1.4.0 roles, that is a person in the `admin` role segment (scope `admin`). |
 | `mention_notifications` | boolean | true | Tell people directly when a post names them. |
 | `everyone_notifications` | boolean | true | Tell everyone about a post to everyone (no audience, the default): one `mention` row via `@everyone` each, so it raises the badge and, unless `everyone_push` is off, sends a push. |
@@ -267,8 +268,9 @@ node board/helpers.test.mjs
 
 ## Versions
 
-The version is the npm package version in `package.json` (currently 3.4.0), which covers the whole package. Nothing else records it.
+The version is the npm package version in `package.json` (currently 3.4.1), which covers the whole package. Nothing else records it.
 
+- **3.4.1**: tidy and two fixes, no API or schema change. Accent folding, the `@` boundary and one-line clipping are shared in `text.js` (not exported). A push body cut by `pushMessage` no longer ends in a space before the ellipsis, matching `notificationText`. The `@` picker tests in `mentions.test.mjs` now actually run. Fixes: `findMentions` and `findTags` spans line up with the original text when folding changes its length (an accent typed as its own character, a letter that lower-cases longer); `sendPushes` honours `ttl: 0` instead of replacing it with the 24-hour default.
 - **3.4.0**: push delivery. `webpush.js` (Web Push in WebCrypto: `generateVapidKeys`, `validSubscription`, `vapidAuthorization`, `encryptPayload`, `sendPush`, `pushEnabled`) and `push.js` (`pushRecipients`, `pushMessage`, `subscriptionSql`, `buildPushes`, `sendPushes`), plus a new table, `push_subscription`. Additive: a core-managed account picks the table up when the plugin is reinstalled; any other host runs `migrate-3.4.0.sql` once. No existing table changes.
 - **3.3.0**: composer helpers in `mentions.js` — `mentionQuery(text, caret)`, `suggestMentions(query, people, {limit, exclude})`, `applyMention(text, caret, mention, handle)` — so every host's `@` picker suggests exactly what the server will match. No schema change.
 - **3.2.0**: a post to everyone (the default) now sends a push as well as the badge, as does every direct mention; 3.1.0 pushed only for a named person or an explicit `@everyone`. New setting `everyone_push` (default on) turns the push off for everyone posts. `notificationPlan` no longer takes `everyoneTagged`. No schema change and no migration.

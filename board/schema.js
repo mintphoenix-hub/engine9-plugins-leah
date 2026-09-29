@@ -3,20 +3,19 @@
  * here are the deployed names. The plugin sets no metadata.prefix; core leaves plugin.table_prefix
  * empty and SQL, transforms and reports can name the tables directly.
  *
- * A post is a row in `engine9_message_board_post`. A reply is a post with reply_to_id set
- * (one level of threading): the root post shows its replies
- * underneath, and a new reply brings its thread back to the top via
- * post.last_activity_at on the root.
+ * A post is a row in `engine9_message_board_post`. A reply is a post with reply_to_id set (one
+ * level of threading): the root post shows its replies underneath, and a new reply brings its
+ * thread back to the top via post.last_activity_at on the root.
  *
- * Audience: audience_person_ids is null/empty for "everyone"; otherwise a JSON
- * array of person ids the post is addressed to.
+ * Audience: audience_person_ids is null/empty for "everyone"; otherwise a JSON array of person
+ * ids the post is addressed to.
  *
- * Context: a post can hang off any other record (an order, a campaign, a
- * project) via context_table + context_id, so a thread can live on that record's
- * page and, if the host wants, also appear on a main board tagged with it.
+ * Context: a post can hang off any other record (an order, a campaign, a project) via
+ * context_table + context_id, so a thread can live on that record's page and, if the host wants,
+ * also appear on a main board tagged with it.
  *
- * Unread: read_marker keeps one last_read_at per person; a thread is new when any
- * post in it is newer than that and not by the reader.
+ * Unread: read_marker keeps one last_read_at per person; a thread is new when any post in it is
+ * newer than that and not by the reader.
  */
 export const tables = [
   {

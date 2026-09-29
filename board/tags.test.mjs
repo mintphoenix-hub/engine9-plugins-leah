@@ -37,6 +37,11 @@ console.log('\nfinding them in the text:');
   ck('positions slice back to the text', t.slice(f[0].start, f[0].end) === '@managers' && t.slice(f[1].start, f[1].end) === '#launch');
 }
 
+{
+  const t = 'Cafe\u0301 news #launch for @managers';
+  const spans = findTags(t, ['managers']);
+  ck('tag spans line up after a separately typed accent', spans.map((x) => t.slice(x.start, x.end)).join() === '#launch,@managers', JSON.stringify(spans));
+}
 console.log('\nrows:');
 ck('post_tag rows', tagRows('p1', { groups: ['staff'], topics: ['launch'] }).map((r) => `${r.kind}:${r.tag}`).join() === 'group:staff,topic:launch');
 {

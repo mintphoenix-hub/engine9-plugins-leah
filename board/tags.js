@@ -17,11 +17,11 @@
   was typed, and so a tag is always safe in a URL.
 */
 
+import { fold, foldWithMap, AT_BOUNDARY } from './text.js';
+
 const MAX_TAG = 40;
 
-const fold = (v) => String(v == null ? '' : v)
-  .normalize('NFD').replace(/[̀-ͯ]/g, '')
-  .toLowerCase();
+const tagName = (g) => normalizeTag(typeof g === 'string' ? g : g?.tag);
 
 /* A tag as stored, or '' if what was given cannot be one. */
 export function normalizeTag(value) {
@@ -54,27 +54,26 @@ export function parseGroupTags(body, groups = []) {
   if (!text.includes('@')) return [];
   const found = [];
   for (const g of groups) {
-    const name = normalizeTag(typeof g === 'string' ? g : g?.tag);
+    const name = tagName(g);
     if (!name || found.includes(name)) continue;
-    if (new RegExp(`(^|[^\\w@.-])@${name}(?![\\w-])`).test(text)) found.push(name);
+    // A tag name is [a-z0-9_-] only, so it needs no escaping.
+    if (new RegExp(`${AT_BOUNDARY}@${name}(?![\\w-])`).test(text)) found.push(name);
   }
   return found;
 }
 
 /* Where the tags are in the text, for highlighting. [{start, end, tag, kind}] */
 export function findTags(body, groups = []) {
-  const text = String(body || '');
-  const folded = fold(text);
+  const { folded, at } = foldWithMap(body);
   const out = [];
-  const names = groups.map((g) => normalizeTag(typeof g === 'string' ? g : g?.tag)).filter(Boolean);
+  const names = new Set(groups.map(tagName).filter(Boolean));
   const re = /(^|[^\w&#/@.-])([#@])([a-z][a-z0-9_-]*)/g;
   let m;
   while ((m = re.exec(folded)) !== null) {
     const kind = m[2] === '#' ? 'topic' : 'group';
     const tag = normalizeTag(m[3]);
-    if (kind === 'group' && !names.includes(tag)) continue;
-    const start = m.index + m[1].length;
-    out.push({ start, end: start + 1 + m[3].length, tag, kind });
+    if (kind === 'group' && !names.has(tag)) continue;
+    out.push({ start: at[m.index + m[1].length], end: at[m.index + m[0].length], tag, kind });
   }
   return out;
 }
