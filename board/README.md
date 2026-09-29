@@ -8,11 +8,16 @@ It is a **native plugin** (`metadata.unique: true`, no `metadata.prefix`) that d
 
 ## Install
 
-1. Add the package to the site's `package.json`:
+1. Add the package to the site's `package.json`. It is installed from GitHub, pinned to a release tag (it is not on the npm registry):
 
    ```json
-   { "engine9": { "pluginPackages": ["@engine9/interfaces", "@mintphoenix/plugins"] } }
+   {
+     "dependencies": { "@mintphoenix/plugins": "github:mintphoenix-hub/engine9-plugins-leah#v3.4.1" },
+     "engine9": { "pluginPackages": ["@engine9/interfaces", "@mintphoenix/plugins"] }
+   }
    ```
+
+   The repository is private, so wherever the site installs (a laptop, CI, the deploy build) needs read access to it, for example a GitHub token with read access to the repository. To upgrade, change the tag and reinstall. Every release is tagged `v<version>`, matching `package.json`.
 
 2. Rebuild the plugin registry and redeploy:
 

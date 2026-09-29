@@ -27,7 +27,7 @@ Read [`board/README.md`](board/README.md) first. It is the contract: data model,
 
 ## Wiring it in
 
-1. List the package in the site's `engine9.pluginPackages`, run `npx e9core build-plugins`, and install `@mintphoenix/plugins/board` on the account (MCP `plugin` `install`). Core creates the self-scoped tables, records the plugin row (empty `table_prefix`) and inserts the settings.
+1. Add the package as a GitHub dependency pinned to a release tag (`github:mintphoenix-hub/engine9-plugins-leah#v<version>`; it is not on the npm registry), list it in the site's `engine9.pluginPackages`, run `npx e9core build-plugins`, and install `@mintphoenix/plugins/board` on the account (MCP `plugin` `install`). Core creates the self-scoped tables, records the plugin row (empty `table_prefix`) and inserts the settings.
 2. Use `tableNames()` for the table names; there is no per-install prefix to read.
 3. Follow the posting flow in [`board/README.md`](board/README.md#posting-the-whole-flow): parse mentions and tags with the helpers, work out who each tag reaches, write the `post`, `mention` and `post_tag` rows in one transaction, then notify.
 4. **Apply schema changes before deploying code that needs them**, and make code tolerate the gap: check that a table exists before using a feature that arrived in a later version, so a deploy that runs ahead of its migration degrades instead of failing on an `INSERT`.
@@ -40,7 +40,8 @@ Read [`board/README.md`](board/README.md) first. It is the contract: data model,
 2. Bump `version` in `package.json` only. It is the sole place the release version lives; never add `metadata.version`. Add a line to the README's version history.
 3. Update `board/README.md`: it is the contract, and code comments are not documentation.
 4. Add or update tests beside the helper (`*.test.mjs`).
-5. Check that core still accepts it: compile it with core's registry (`createPluginRegistry` and `compileRegistryPlugin`) and pass the schema through `standardizeSchema` for the SQLite and MySQL dialects.
+5. Once it is committed and pushed, tag the release `v<version>` (matching `package.json`) and push the tag: sites install by tag. Only when the person asks.
+6. Check that core still accepts it: compile it with core's registry (`createPluginRegistry` and `compileRegistryPlugin`) and pass the schema through `standardizeSchema` for the SQLite and MySQL dialects.
 
 ## Tests
 
