@@ -8,11 +8,11 @@
 
 const BASE_TABLES = ['post', 'reaction', 'mention', 'post_tag', 'tag_follow', 'read_marker', 'idea', 'idea_vote', 'idea_comment'];
 
-/* The deployed table names. Every table is self-scoped with the stem `mintphoenix_board_` and the
+/* The deployed table names. Every table is self-scoped with the stem `engine9_message_board_` and the
    plugin sets no metadata.prefix, so core's plugin.table_prefix is empty and these names are final.
-   Keyed by the short name: tableNames().post === 'mintphoenix_board_post'. `prefix` is only for a
+   Keyed by the short name: tableNames().post === 'engine9_message_board_post'. `prefix` is only for a
    host that copies the tables under another name of its own; leave it out otherwise. */
-export const TABLE_STEM = 'mintphoenix_board_';
+export const TABLE_STEM = 'engine9_message_board_';
 
 export function tableNames(prefix = '') {
   const p = prefix == null ? '' : String(prefix);

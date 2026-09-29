@@ -29,7 +29,7 @@
           {
             component: 'RecordTable',
             properties: {
-              table: 'mintphoenix_board_post',
+              table: 'engine9_message_board_post',
               conditions: [{ eql: 'is_reply=0' }],
               columns: [
                 { title: 'Latest', dataIndex: 'last_activity_at', sorter: true, width: '18%' },
@@ -53,7 +53,7 @@
             path: 'edit',
             component: 'RecordForm',
             properties: {
-              table: 'mintphoenix_board_post',
+              table: 'engine9_message_board_post',
               form: {
                 title: 'New post',
                 type: 'object',
@@ -88,7 +88,7 @@
           {
             component: 'RecordTable',
             properties: {
-              table: 'mintphoenix_board_idea',
+              table: 'engine9_message_board_idea',
               columns: [
                 { title: 'Idea', dataIndex: 'title', sorter: true, width: '34%' },
                 { title: 'When', dataIndex: 'timeframe', sorter: true, width: '18%' },
@@ -112,7 +112,7 @@
             path: 'edit',
             component: 'RecordForm',
             properties: {
-              table: 'mintphoenix_board_idea',
+              table: 'engine9_message_board_idea',
               form: {
                 title: 'Suggest an idea',
                 type: 'object',
@@ -136,13 +136,13 @@
         main: [
           {
             component: 'RecordForm',
-            properties: { table: 'mintphoenix_board_idea', title: '{{record.title}}' }
+            properties: { table: 'engine9_message_board_idea', title: '{{record.title}}' }
           },
           { component: 'Title', properties: { content: 'Feedback' } },
           {
             component: 'RecordTable',
             properties: {
-              table: 'mintphoenix_board_idea_comment',
+              table: 'engine9_message_board_idea_comment',
               conditions: [{ eql: 'idea_id={{id}}' }],
               columns: [
                 { title: 'When', dataIndex: 'created_at', sorter: true, width: '20%' },
@@ -160,13 +160,13 @@
         main: [
           {
             component: 'RecordForm',
-            properties: { table: 'mintphoenix_board_post', title: 'Post' }
+            properties: { table: 'engine9_message_board_post', title: 'Post' }
           },
           { component: 'Title', properties: { content: 'Replies' } },
           {
             component: 'RecordTable',
             properties: {
-              table: 'mintphoenix_board_post',
+              table: 'engine9_message_board_post',
               conditions: [{ eql: 'reply_to_id={{id}}' }],
               columns: [
                 { title: 'When', dataIndex: 'created_at', sorter: true, width: '20%' },

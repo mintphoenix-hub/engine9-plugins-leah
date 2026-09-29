@@ -24,11 +24,15 @@ It is a **native plugin** (`metadata.unique: true`, no `metadata.prefix`) that d
 
 ### Table names
 
-Every table is **self-scoped** with the stem `mintphoenix_board_`: `mintphoenix_board_post`, `mintphoenix_board_reaction` and so on. The plugin sets no `metadata.prefix`, so core leaves `plugin.table_prefix` empty and the names in the schema are the deployed names. SQL can use them directly; there is nothing to look up first. `tableNames()` returns them by short name (`tableNames().post === 'mintphoenix_board_post'`). The rest of this document uses the short names (`post`, `mention`) for readability.
+Every table is **self-scoped** with the stem `engine9_message_board_`: `engine9_message_board_post`, `engine9_message_board_reaction` and so on. The plugin sets no `metadata.prefix`, so core leaves `plugin.table_prefix` empty and the names in the schema are the deployed names. SQL can use them directly; there is nothing to look up first. `tableNames()` returns them by short name (`tableNames().post === 'engine9_message_board_post'`). The rest of this document uses the short names (`post`, `mention`) for readability.
 
 If you deploy to a database core does not manage (for example plain SQLite, or D1 with hand-run migrations), generate the DDL from `board/schema.js` with core's `standardizeSchema` and `buildCreateTable`, then insert the plugin row (empty `table_prefix`) and the settings yourself.
 
-### Upgrading from 1.x
+### Upgrading
+
+**2.0.0 -> 3.0.0** renames the stem from `mintphoenix_board_` to `engine9_message_board_`. Run [`migrate-3.0.0.sql`](migrate-3.0.0.sql) on each install on 2.0.0 names. Deploy host code that accepts both spellings first (see below), then run it; rows are untouched.
+
+**1.x -> 2.0.0.**
 
 2.0.0 renames the tables (see [Versions](#versions)). Run [`migrate-2.0.0.sql`](migrate-2.0.0.sql) on each existing install before deploying 2.0.0 code: it renames the nine tables from `<table_prefix><name>` and clears `plugin.table_prefix`. Core 1.4.0 must already be in place, because core 1.3.x refuses a schema plugin that has no `metadata.prefix`.
 
@@ -63,6 +67,7 @@ Everything exported from `index.js` is pure: no I/O, no globals, safe to run in 
 import {
   withHandles, parseMentions, findMentions, mentionRows, addedMentions,
   parseHashtags, parseGroupTags, findTags, tagRows, tagMentionRows, normalizeTag,
+  everyoneMentionRows, notificationPlan, notificationText, unreadBadgeSql, isEveryone,
   tableNames, ORDER_OLDEST_FIRST, canonicalId, uuidFor, isUuid,
   toSqlTime, fromSqlTime, parseReactionList,
 } from '@mintphoenix/plugins/board';
@@ -72,7 +77,7 @@ import {
 
 | Helper | What it does |
 | --- | --- |
-| `tableNames()` | The deployed table names, keyed by short name: `tableNames().post === 'mintphoenix_board_post'`. `TABLE_STEM` is the `mintphoenix_board_` stem. |
+| `tableNames()` | The deployed table names, keyed by short name: `tableNames().post === 'engine9_message_board_post'`. `TABLE_STEM` is the `engine9_message_board_` stem. |
 | `ORDER_OLDEST_FIRST` | `'created_at, rowid'`. Use it wherever order is shown (see [Ordering](#ordering)). |
 | `canonicalId(id)` / `uuidFor(seed)` / `isUuid(v)` | Map an id a system already has onto the plugin's uuid, deterministically. A uuid is kept; anything else always gives the same uuid, so a retried write cannot double and a client holding its own id finds the row. |
 | `toSqlTime(ms)` / `fromSqlTime(text)` | Epoch milliseconds to and from the plugin's datetime text (UTC, with a fractional second). Text with no zone is read as UTC. |
@@ -109,7 +114,8 @@ A host that follows these steps gets the plugin's behaviour, whatever its stack.
 4. **Work out who each tag reaches.** For a group, resolve its members with your own query. For a topic, select `person_id` from `tag_follow` where `tag` matches.
 5. **Attach a reply to the top-level post**, whichever message it answered, so stored threads stay one level deep. Reject a reply aimed at a post in a different thread (`context_table` + `context_id` must match). Set the root's `last_activity_at`.
 6. **Write, in one transaction:** the `post` row; a `mention` row per person named (from `mentionRows`); `post_tag` rows (from `tagRows`); and a `mention` row per person a tag reached (from `tagMentionRows`, which skips the author and anyone already named directly and writes a person reached two ways once, under the first tag that reached them).
-7. **Notify** the people you wrote `mention` rows for. The unread count needs no extra work: it is a query over `mention`.
+6a. **If the post is to everyone** (no audience), add `everyoneMentionRows` for the host's people, after the rows above.
+7. **Notify** the people you wrote `mention` rows for: `notificationPlan` says who gets a push and a badge, `notificationText` writes the push. The unread count needs no extra work: it is a query over `mention`.
 
 ### Reading
 
@@ -119,7 +125,7 @@ A host that follows these steps gets the plugin's behaviour, whatever its stack.
 - **Unread mentions:**
 
   ```sql
-  SELECT COUNT(*) FROM mintphoenix_board_mention m JOIN mintphoenix_board_post p ON p.id = m.post_id
+  SELECT COUNT(*) FROM engine9_message_board_mention m JOIN engine9_message_board_post p ON p.id = m.post_id
    WHERE m.person_id = :me AND p.deleted_at IS NULL
      AND p.created_at > :last_read AND p.person_id <> :me;
   ```
@@ -151,11 +157,23 @@ Tag names are lower-case ASCII letters, digits, `_` and `-`, starting with a let
 | a post names them (`@Ada`) | `mention` row, `via_tag` null |
 | a post tags a group they are in | `mention` row, `via_tag = '@managers'` |
 | a post carries a topic they follow | `mention` row, `via_tag = '#launch'` |
+| a post is to everyone (no audience, the default) | `mention` row, `via_tag = '@everyone'` |
 
 - Never the author, about their own post.
 - Once per post, however many ways they were reached; a direct mention is never re-credited to a tag.
 - A reply may also tell the root's author and earlier repliers; the plugin does not write those rows, so add them if you want that behaviour.
-- Whether a `mention` row becomes an email or a push, and honouring an opt-out, is the host's decision.
+- Whether a `mention` row becomes an email, and honouring an opt-out, is the host's decision. Push and badge follow [Push and badge](#push-and-badge).
+
+### Push and badge
+
+A person gets a **push and a badge** each time they are **named** in a message, and each time a post is **to everyone**, which is the default (no audience). The plugin decides who and what; the host sends the push and draws the badge. For a team that finds a push on every everyone post too much, `everyone_push` off keeps those to the badge and still pushes a person named directly.
+
+- **To everyone** is the default: `audience_person_ids` null or empty (`isEveryone`). Everyone is the host's group, resolved as a live query when the post is written. `everyoneMentionRows(postId, { audience, everyoneIds, alreadyNotified, authorPersonId })` writes one `via_tag = '@everyone'` row per person, skipping the author and anyone already told, so a person who is named and in everyone is told once, as named. A post with an audience writes none.
+- **Order of writing:** direct mentions, then tag rows, then everyone rows, passing the ids already written as `alreadyNotified` each time.
+- **`notificationPlan(rows, settings)`** turns the rows just written into `{ push: [{person_id, via_tag}], badge: [person_id] }`. A person named directly and every person a post to everyone reaches are in both lists; nobody is planned twice, and the author is never in it. It applies `mention_notifications`, `everyone_notifications`, `push_notifications`, `badge_notifications` and `everyone_push` (missing settings count as on). A person reached only by another group or a followed topic gets the badge and no push; sending one is the host's call, as is a person's own "push me for every post" preference.
+- **`notificationText(post, viaTag, max)`** gives the push `{title, body}`: `Ada mentioned you`, `Ada posted to everyone`, `Ada posted to @managers`, with the body on one line and cut at `max` (140).
+- **The badge** is `unreadBadgeSql()`: a count over `mention` rows for `:me` newer than `:last_read`, not deleted, not by them. Direct, everyone and tag rows all count because each is a `mention` row; there is no second path. Recompute it after a post lands, when the person reads (move `read_marker.last_read_at`) and when a post is deleted.
+- A post addressed to specific people (`audience_person_ids` set) tells only the people it names or tags; the plugin does not treat an audience list as a mention.
 
 ## Search
 
@@ -190,6 +208,10 @@ Declared in `settings.js`, inserted per install on first install, changed later 
 | `allow_edit` | boolean | true | Authors may edit their own posts, ideas and comments. |
 | `moderator_delete` | boolean | true | Admins may remove any post; otherwise only the author. "Admin" is the host's decision. With core 1.4.0 roles, that is a person in the `admin` role segment (scope `admin`). |
 | `mention_notifications` | boolean | true | Tell people directly when a post names them. |
+| `everyone_notifications` | boolean | true | Tell everyone about a post to everyone (no audience, the default): one `mention` row via `@everyone` each, so it raises the badge and, unless `everyone_push` is off, sends a push. |
+| `push_notifications` | boolean | true | Send a push each time a person is named and each time a post is to everyone. |
+| `everyone_push` | boolean | true | Push people about posts to everyone. Off keeps those to the badge; a person named directly is still pushed. |
+| `badge_notifications` | boolean | true | Raise the unread badge for people told by a post. |
 | `reaction_emoji` | string | `👍,❤️,😂,🎉,👀` | Comma-separated emoji offered as reactions. Validate incoming reactions against it. |
 
 ## Tests
@@ -199,14 +221,18 @@ The parsing logic has no dependencies:
 ```
 node board/mentions.test.mjs
 node board/tags.test.mjs
+node board/notifications.test.mjs
 node board/helpers.test.mjs
 ```
 
 ## Versions
 
-The version is the npm package version in `package.json` (currently 2.1.0), which covers the whole package. Nothing else records it.
+The version is the npm package version in `package.json` (currently 3.3.0), which covers the whole package. Nothing else records it.
 
-- **2.1.0**: composer helpers in `mentions.js` — `mentionQuery(text, caret)`, `suggestMentions(query, people, {limit, exclude})`, `applyMention(text, caret, mention, handle)` — so every host's `@` picker suggests exactly what the server will match. No schema change.
+- **3.3.0**: composer helpers in `mentions.js` — `mentionQuery(text, caret)`, `suggestMentions(query, people, {limit, exclude})`, `applyMention(text, caret, mention, handle)` — so every host's `@` picker suggests exactly what the server will match. No schema change.
+- **3.2.0**: a post to everyone (the default) now sends a push as well as the badge, as does every direct mention; 3.1.0 pushed only for a named person or an explicit `@everyone`. New setting `everyone_push` (default on) turns the push off for everyone posts. `notificationPlan` no longer takes `everyoneTagged`. No schema change and no migration.
+- **3.1.0**: push and badge notifications. A post to everyone (no audience, the default) now counts as unread for everyone, as `mention` rows via `@everyone`, and raises the badge; push goes only to people named or pinged with an explicit `@everyone`; `notifications.js` (`isEveryone`, `everyoneMentionRows`, `notificationPlan`, `notificationText`, `unreadBadgeSql`); settings `everyone_notifications`, `push_notifications`, `badge_notifications`. No schema change and no migration.
+- **3.0.0** (breaking): the table stem is `engine9_message_board_` (was `mintphoenix_board_`): `engine9_message_board_post`, ... `tableNames()` and `TABLE_STEM` return the new names. Plugin path (`@mintphoenix/plugins/board`) and settings are unchanged. Existing 2.0.0 installs must run `migrate-3.0.0.sql`. A host that wants a zero-downtime rollout probes for `engine9_message_board_post` and falls back to `mintphoenix_board_post` until the migration has run.
 - **2.0.0** (breaking): tables are self-scoped (`mintphoenix_board_post`, ...) and the plugin no longer sets `metadata.prefix`, per the engine9 plugin guidelines. `metadata.version` is removed. `tableNames()` returns the new names. Requires `@engine9/core` >= 1.4.0 and `@engine9/interfaces` >= 1.8.0. Existing installs must run `migrate-2.0.0.sql` first.
 - **1.6.0**: `helpers.js` (`tableNames`, `ORDER_OLDEST_FIRST`, `canonicalId`, `uuidFor`, `isUuid`, `toSqlTime`, `fromSqlTime`, `parseReactionList`, `DEFAULT_REACTIONS`) and `addedMentions`: the pieces every host was writing for itself. Documented the timestamp-tie ordering rule.
 - **1.5.0**: `handleFor` reads only `displayName` (falling back to `name`); any other name field is ignored. Pass the name you show for someone as `displayName`.
