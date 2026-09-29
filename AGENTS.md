@@ -6,7 +6,7 @@ Read this before changing the plugin or wiring it into an application. It is wri
 
 A package of engine9 native plugins. Each directory with an `index.js` is one plugin and its identity is `@mintphoenix/plugins/<directory>`. Today there is one: [`board`](board/README.md), a message board (threaded posts, reactions, `@mentions`, `@group` and `#topic` tags that notify, unread tracking, an ideas list).
 
-The plugin owns the **schema, settings, console screens and pure parsing helpers**. Your application owns everything that touches your users: sign-in, who can be mentioned, what a group means, delivery of notifications, permissions. Keep it that way. If a change would make the plugin know about one product's vocabulary, it belongs in that product.
+The plugin owns the **schema, settings, console screens, the parsing helpers and the notification machinery** (who is pushed, Web Push encryption and sending). Your application owns everything that touches your users: sign-in, who can be mentioned, what a group means, the VAPID keys (a secret), where subscriptions are read and written, permissions. Keep it that way. If a change would make the plugin know about one product's vocabulary, it belongs in that product.
 
 Read [`board/README.md`](board/README.md) first. It is the contract: data model, the posting flow, notification rules, settings, version history.
 
@@ -50,6 +50,8 @@ The helpers have no dependencies:
 node board/mentions.test.mjs
 node board/tags.test.mjs
 node board/notifications.test.mjs
+node board/push.test.mjs
+node board/webpush.test.mjs
 node board/helpers.test.mjs
 ```
 
@@ -59,6 +61,8 @@ Do not start HTTP servers or apply anything to a shared database unless the pers
 
 - With core 1.3.x, a native plugin that shipped a schema had to declare `metadata.prefix` or install was refused ("Disallowed plugin"). Core 1.4.0 reversed that: a schema without a prefix installs with an empty `table_prefix`. That is why this package needs core 1.4.0 or later.
 - Matching mentions by substring fires inside longer names (`@Meg` inside `@Megan`) and on email addresses. Use the helpers; they have the edge cases covered.
+- Storing a push endpoint without `validSubscription` turns a subscribe route into a way to make your server call any URL.
+- Putting the VAPID private key in the repository or in the page. The public key is public; the private key is a secret.
 - Counting notifications from the text of posts instead of `mention` rows makes the unread count disagree with what was sent.
 - A group that is a stored list goes stale the day someone joins. Resolve it when the post is written.
 

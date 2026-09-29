@@ -121,6 +121,23 @@ export const tables = [
     ]
   },
   {
+    name: 'engine9_message_board_push_subscription',
+    columns: {
+      id: 'id_uuid',
+      person_id: { type: 'person_id', description: 'Whose device this is' },
+      endpoint: { type: 'string', length: 512, nullable: false, description: 'The URL the browser push service gave this device; the natural key' },
+      p256dh: { type: 'string', length: 128, nullable: false, description: 'The device public key (base64url, 65 bytes)' },
+      auth: { type: 'string', length: 64, nullable: false, description: 'The device auth secret (base64url, 16 bytes)' },
+      user_agent: { type: 'string', description: 'Browser that subscribed, for telling devices apart' },
+      created_at: 'created_at'
+    },
+    indexes: [
+      { columns: 'id', primary: true },
+      { columns: 'endpoint', unique: true },
+      { columns: ['person_id'] }
+    ]
+  },
+  {
     name: 'engine9_message_board_idea',
     columns: {
       id: 'id_uuid',

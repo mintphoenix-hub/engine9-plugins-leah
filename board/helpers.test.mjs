@@ -1,10 +1,11 @@
 import { tableNames, ORDER_OLDEST_FIRST, isUuid, uuidFor, canonicalId, toSqlTime, fromSqlTime, parseReactionList, DEFAULT_REACTIONS } from './helpers.js';
+import { tables } from './schema.js';
 let pass = 0, fail = 0; const ck = (n, c, d = '') => { console.log(`  ${c ? 'ok  ' : 'FAIL'}  ${n}${d ? ' -> ' + d : ''}`); c ? pass++ : fail++; };
 
 console.log('table names:');
 ck('every table carries the self-scoped stem', tableNames().post === 'engine9_message_board_post' && tableNames().idea_comment === 'engine9_message_board_idea_comment');
 ck('an optional prefix goes in front of the stem', tableNames('x_').post === 'x_engine9_message_board_post');
-ck('all nine tables are named', Object.keys(tableNames()).length === 9);
+ck('every table in the schema is named, and nothing else is', Object.keys(tableNames()).length === tables.length && tables.every((t) => Object.values(tableNames()).includes(t.name)));
 ck('null is the same as no prefix', tableNames(null).reaction === 'engine9_message_board_reaction');
 ck('ties are broken by insertion order', ORDER_OLDEST_FIRST === 'created_at, rowid');
 

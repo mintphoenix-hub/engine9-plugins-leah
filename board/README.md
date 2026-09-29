@@ -30,6 +30,8 @@ If you deploy to a database core does not manage (for example plain SQLite, or D
 
 ### Upgrading
 
+**3.3.0 -> 3.4.0** adds the `push_subscription` table and changes nothing else. On a core-managed account, reinstall the plugin and core creates it. On any other host run [`migrate-3.4.0.sql`](migrate-3.4.0.sql) once; it is additive, so it is safe before or after the code that uses it.
+
 **2.0.0 -> 3.0.0** renames the stem from `mintphoenix_board_` to `engine9_message_board_`. Run [`migrate-3.0.0.sql`](migrate-3.0.0.sql) on each install on 2.0.0 names. Deploy host code that accepts both spellings first (see below), then run it; rows are untouched.
 
 **1.x -> 2.0.0.**
@@ -46,6 +48,7 @@ If you deploy to a database core does not manage (for example plain SQLite, or D
 | `post_tag` | The tags on a post. `kind` is `group` (`@managers`: notifies its members) or `topic` (`#launch`: notifies followers). Unique per post and tag. |
 | `tag_follow` | A person following a topic. Unique per person and tag. |
 | `read_marker` | One row per person: `last_read_at`. |
+| `push_subscription` | One row per device that said yes to push: `person_id`, the browser push service's `endpoint` (unique: the natural key), and the device's two public values `p256dh` and `auth`. A phone that changes hands follows its new owner. |
 | `idea`, `idea_vote`, `idea_comment` | Suggestions with a rough `timeframe`, a `status` (`Open`, `Picked up`, `Parked`, `Declined`), thumbs-up votes and feedback comments. |
 
 Authors, reactors, mentioned people, followers and readers are all engine9 `person_id`s.
@@ -58,6 +61,7 @@ Authors, reactors, mentioned people, followers and readers are all engine9 `pers
 | `mentions.js`: give people handles, find `@name`s in text, highlight them | The list of people who can be mentioned, and their display names |
 | `tags.js`: find `@group`s and `#topic`s, shape the rows | What each group means (who is in `@managers`) |
 | Row shapes: `mentionRows`, `tagRows`, `tagMentionRows` | Writing them, and the SQL that reads a thread |
+| `push.js` + `webpush.js`: who is pushed, what it says, the device table's SQL, Web Push encryption and sending | The VAPID keys (a secret), where a tap goes, group membership, and reading and writing your database |
 | | Delivery: the badge count, email, push |
 | | Who may edit or delete a post |
 
@@ -175,6 +179,40 @@ A person gets a **push and a badge** each time they are **named** in a message, 
 - **The badge** is `unreadBadgeSql()`: a count over `mention` rows for `:me` newer than `:last_read`, not deleted, not by them. Direct, everyone and tag rows all count because each is a `mention` row; there is no second path. Recompute it after a post lands, when the person reads (move `read_marker.last_read_at`) and when a post is deleted.
 - A post addressed to specific people (`audience_person_ids` set) tells only the people it names or tags; the plugin does not treat an audience list as a mention.
 
+### Delivering the push (`push.js`, `webpush.js`)
+
+The plugin also sends. `webpush.js` is Web Push in WebCrypto (RFC 8291 encryption, RFC 8292 VAPID), with no third-party service and no dependencies, so it runs in a Worker, Node 18+ and Deno. `push.js` is the board's part: who hears about a post and the words of the push. Your application supplies the keys and the database.
+
+```js
+import { generateVapidKeys, validSubscription, pushRecipients, buildPushes, sendPushes, subscriptionSql, canonicalId } from '@mintphoenix/plugins/board';
+
+// once: a key pair. The public key goes in configuration (the page needs it to subscribe),
+// the private key is a secret. `subject` is a mailto: the push services can reach.
+const { publicKey, privateKey } = await generateVapidKeys();
+const vapid = { publicKey, privateKey, subject: 'mailto:ops@example.org' };
+
+// a person turns notifications on: check what the browser sent, then store it
+const sub = validSubscription(await request.json());        // null unless it is a real push service
+const q = subscriptionSql(prefix);                          // SQL strings, `?` placeholders
+await db.run(q.save, [canonicalId(sub.endpoint), personId, sub.endpoint, sub.p256dh, sub.auth, userAgent]);
+
+// a post lands: who hears, on which devices, then send
+const recipients = pushRecipients({ authorPersonId, isReply, audience, everyone: everyoneIds,
+  threadPersonIds, mentionedPersonIds, taggedPersonIds });
+const devices = await db.all(q.forPersons(recipients.length), recipients.map((r) => r.personId));
+const pushes = buildPushes(recipients, devices, { from: 'Ada', body, url: '/board', threadKey: rootId, counts });
+const { sent, gone } = await sendPushes(pushes, vapid);
+for (const endpoint of gone) await db.run(q.removeGone, [endpoint]);   // a device that unsubscribed
+```
+
+- **Who hears** (`pushRecipients`): a new top-level post tells its audience (none means everyone), minus the author; a reply tells the thread (the root's author and earlier repliers), not the team; a person named, or reached by an `@group` or a followed `#topic`, hears it directly **instead of** the general notice, never both; nobody outside a post's audience is told; person 0 never is.
+- **What it says** (`pushMessage`): `Ada mentioned you`, `Ada replied`, `Ada posted to #launch`, `Ada posted on the board` (name the board with `boardName`), with the body on one line and cut at 140.
+- **Devices** (`subscriptionSql`): the `push_subscription` table. `save` is an upsert on `endpoint`; `remove` needs the endpoint **and** the owner, so nobody can switch off someone else's notifications by knowing an endpoint; `removeGone` deletes a device the push service reported gone. `dialect` is `'sqlite'` (also D1) or `'mysql'`.
+- **Sending** (`sendPushes`): one message per device, never batched; best effort, so one bad device never stops the rest. It returns `{ sent, failed, gone, people }`, only counts and endpoints, never who a device belonged to. A mention goes out at high urgency, and pushes about one thread share a tag so they replace each other on a lock screen instead of stacking.
+- **Validate every endpoint** with `validSubscription`. An endpoint is a URL a signed-in person hands your server, which then POSTs to it; without the allow-list a subscribe route lets someone make your server call any address. Pass `{ hosts }` to allow another push service.
+- **No key, no send**: `pushEnabled(vapid)` is false without a public key, a private key and a subject. Apple rejects a VAPID token with no subject, so `vapidAuthorization` throws without one.
+- **Nothing is ever only a push.** iPhones take a web push only once the app is on the Home Screen, so the board must still show everything and the badge (`unreadBadgeSql`) must still carry the count.
+
 ## Search
 
 None.
@@ -222,13 +260,16 @@ The parsing logic has no dependencies:
 node board/mentions.test.mjs
 node board/tags.test.mjs
 node board/notifications.test.mjs
+node board/push.test.mjs
+node board/webpush.test.mjs
 node board/helpers.test.mjs
 ```
 
 ## Versions
 
-The version is the npm package version in `package.json` (currently 3.3.0), which covers the whole package. Nothing else records it.
+The version is the npm package version in `package.json` (currently 3.4.0), which covers the whole package. Nothing else records it.
 
+- **3.4.0**: push delivery. `webpush.js` (Web Push in WebCrypto: `generateVapidKeys`, `validSubscription`, `vapidAuthorization`, `encryptPayload`, `sendPush`, `pushEnabled`) and `push.js` (`pushRecipients`, `pushMessage`, `subscriptionSql`, `buildPushes`, `sendPushes`), plus a new table, `push_subscription`. Additive: a core-managed account picks the table up when the plugin is reinstalled; any other host runs `migrate-3.4.0.sql` once. No existing table changes.
 - **3.3.0**: composer helpers in `mentions.js` — `mentionQuery(text, caret)`, `suggestMentions(query, people, {limit, exclude})`, `applyMention(text, caret, mention, handle)` — so every host's `@` picker suggests exactly what the server will match. No schema change.
 - **3.2.0**: a post to everyone (the default) now sends a push as well as the badge, as does every direct mention; 3.1.0 pushed only for a named person or an explicit `@everyone`. New setting `everyone_push` (default on) turns the push off for everyone posts. `notificationPlan` no longer takes `everyoneTagged`. No schema change and no migration.
 - **3.1.0**: push and badge notifications. A post to everyone (no audience, the default) now counts as unread for everyone, as `mention` rows via `@everyone`, and raises the badge; push goes only to people named or pinged with an explicit `@everyone`; `notifications.js` (`isEveryone`, `everyoneMentionRows`, `notificationPlan`, `notificationText`, `unreadBadgeSql`); settings `everyone_notifications`, `push_notifications`, `badge_notifications`. No schema change and no migration.

@@ -6,7 +6,7 @@
 
 /* ---- table names ------------------------------------------------------------------------ */
 
-const BASE_TABLES = ['post', 'reaction', 'mention', 'post_tag', 'tag_follow', 'read_marker', 'idea', 'idea_vote', 'idea_comment'];
+const BASE_TABLES = ['post', 'reaction', 'mention', 'post_tag', 'tag_follow', 'read_marker', 'push_subscription', 'idea', 'idea_vote', 'idea_comment'];
 
 /* The deployed table names. Every table is self-scoped with the stem `engine9_message_board_` and the
    plugin sets no metadata.prefix, so core's plugin.table_prefix is empty and these names are final.
