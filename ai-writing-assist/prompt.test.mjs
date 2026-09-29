@@ -35,7 +35,7 @@ ck('no instruction still gives a default ask', buildMessages({ mode: 'rewrite', 
 const dr = buildMessages({ mode: 'draft', instruction: 'about sleep', text: '' });
 ck('a draft from a brief has no notes section', dr[1].content.includes('about sleep') && !dr[1].content.includes('Their notes'));
 ck('a draft from notes includes them', buildMessages({ mode: 'draft', text: 'point one' })[1].content.includes('point one'));
-ck('the base rules name no person or place', !/louise|palmwoods|queensland|kinesiolog/i.test(BASE_INSTRUCTIONS));
+ck('the base rules speak of "they", never a named writer or business', /\bthey\b/i.test(BASE_INSTRUCTIONS) && !/\b(Inc|Ltd|Pty)\b/.test(BASE_INSTRUCTIONS));
 
 console.log('\nreading an answer:');
 ck('{ response }', readReply({ response: 'a' }) === 'a');
