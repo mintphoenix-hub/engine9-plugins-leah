@@ -4,11 +4,11 @@ Read this before changing the plugin or wiring it into an application. It is wri
 
 ## What this is
 
-A package of engine9 native plugins. Each directory with an `index.js` is one plugin and its identity is `@mintphoenix/plugins/<directory>`. Today there is one: [`board`](board/README.md), a message board (threaded posts, reactions, `@mentions`, `@group` and `#topic` tags that notify, unread tracking, an ideas list).
+A package of engine9 native plugins. Each directory with an `index.js` is one plugin and its identity is `@mintphoenix/plugins/<directory>`. Today there are two: [`board`](board/README.md), a message board (threaded posts, reactions, `@mentions`, `@group` and `#topic` tags that notify, unread tracking, an ideas list), and [`ai-writing-assist`](ai-writing-assist/README.md), writing help on Cloudflare Workers AI (a person's own words in, a suggestion out; the host owns the AI call, the database and the brief about the writer).
 
 The plugin owns the **schema, settings, console screens, the parsing helpers and the notification machinery** (who is pushed, Web Push encryption and sending). Your application owns everything that touches your users: sign-in, who can be mentioned, what a group means, the VAPID keys (a secret), where subscriptions are read and written, permissions. Keep it that way. If a change would make the plugin know about one product's vocabulary, it belongs in that product.
 
-Read [`board/README.md`](board/README.md) first. It is the contract: data model, the posting flow, notification rules, settings, version history.
+Read the README of the plugin you are changing first ([`board`](board/README.md), [`ai-writing-assist`](ai-writing-assist/README.md)). It is the contract: data model, the flow, rules, settings, version history. The rules below name the board's tables and helpers as examples; each plugin has its own stem (`engine9_message_board_`, `engine9_ai_writing_assist_`) and its own `tableNames()`.
 
 ## Rules
 
@@ -48,6 +48,8 @@ Read [`board/README.md`](board/README.md) first. It is the contract: data model,
 The helpers have no dependencies:
 
 ```
+node ai-writing-assist/prompt.test.mjs
+node ai-writing-assist/assist.test.mjs
 node board/mentions.test.mjs
 node board/tags.test.mjs
 node board/notifications.test.mjs
