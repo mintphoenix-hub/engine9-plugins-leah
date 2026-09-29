@@ -70,15 +70,29 @@ Who the writer is, how they sound, and what their field forbids go in the `guide
 | `daily_limit` | 150 (1 to 2000) | Most answered requests per UTC day. When reached, the helper says to try again tomorrow. |
 | `max_input_chars` | 9000 (hidden) | More than this is refused with a message asking for one section at a time. |
 
+## Updating with engine9 core
+
+Nothing is run by hand. Whenever the account reinstalls the plugin (after upgrading `@engine9/core` or this package, then `npx e9core build-plugins`), core diffs `schema.js` against the database, creates any missing table or column, and adds any new setting without overwriting the operator's values. Then it calls the plugin's `install` hook (`upgrade.js`, on the default export), which reads what the database really has and answers with a one-line message: up to date, or which tables or columns are still missing. The check never runs DDL and never throws, so it cannot fail an install.
+
+| Function | Does |
+| --- | --- |
+| `install({ sqlWorker })` | The hook core calls. Returns `{ message }`. |
+| `upgradePlan(found)` | Pure. `found` maps a table to its column names (or null). Returns `{ upToDate, missingTables, missingColumns }`; extra columns are ignored. |
+| `upgradeMessage(plan)`, `expectedSchema()` | The message, and the tables and columns `schema.js` declares. |
+
+A host whose database core does not manage can call `upgradePlan` with its own column list to decide whether to run DDL generated from `schema.js`. Schema changes stay additive, so a deploy that runs ahead of the reinstall degrades instead of failing.
+
 ## Tests
 
 ```
 node ai-writing-assist/prompt.test.mjs
 node ai-writing-assist/assist.test.mjs
+node ai-writing-assist/upgrade.test.mjs
 ```
 
 ## Versions
 
 The version is the npm package version in `package.json`, which covers the whole package.
 
+- **3.6.0**: updates with engine9 core. New `upgrade.js`: an `install` hook that core calls on every install and reinstall, after it has deployed the schema and settings, plus the pure `upgradePlan` it uses. No schema change and no migration.
 - **3.5.0**: adds the `ai-writing-assist` plugin (new table `engine9_ai_writing_assist_use`). No change to `board`.

@@ -50,6 +50,7 @@ The helpers have no dependencies:
 ```
 node ai-writing-assist/prompt.test.mjs
 node ai-writing-assist/assist.test.mjs
+node ai-writing-assist/upgrade.test.mjs
 node board/mentions.test.mjs
 node board/tags.test.mjs
 node board/notifications.test.mjs
