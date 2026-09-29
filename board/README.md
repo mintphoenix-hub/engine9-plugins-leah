@@ -24,11 +24,15 @@ It is a **native plugin** (`metadata.unique: true`, no `metadata.prefix`) that d
 
 ### Table names
 
-Every table is **self-scoped** with the stem `mintphoenix_board_`: `mintphoenix_board_post`, `mintphoenix_board_reaction` and so on. The plugin sets no `metadata.prefix`, so core leaves `plugin.table_prefix` empty and the names in the schema are the deployed names. SQL can use them directly; there is nothing to look up first. `tableNames()` returns them by short name (`tableNames().post === 'mintphoenix_board_post'`). The rest of this document uses the short names (`post`, `mention`) for readability.
+Every table is **self-scoped** with the stem `engine9_message_board_`: `engine9_message_board_post`, `engine9_message_board_reaction` and so on. The plugin sets no `metadata.prefix`, so core leaves `plugin.table_prefix` empty and the names in the schema are the deployed names. SQL can use them directly; there is nothing to look up first. `tableNames()` returns them by short name (`tableNames().post === 'engine9_message_board_post'`). The rest of this document uses the short names (`post`, `mention`) for readability.
 
 If you deploy to a database core does not manage (for example plain SQLite, or D1 with hand-run migrations), generate the DDL from `board/schema.js` with core's `standardizeSchema` and `buildCreateTable`, then insert the plugin row (empty `table_prefix`) and the settings yourself.
 
-### Upgrading from 1.x
+### Upgrading
+
+**2.0.0 -> 3.0.0** renames the stem from `mintphoenix_board_` to `engine9_message_board_`. Run [`migrate-3.0.0.sql`](migrate-3.0.0.sql) on each install on 2.0.0 names. Deploy host code that accepts both spellings first (see below), then run it; rows are untouched.
+
+**1.x -> 2.0.0.**
 
 2.0.0 renames the tables (see [Versions](#versions)). Run [`migrate-2.0.0.sql`](migrate-2.0.0.sql) on each existing install before deploying 2.0.0 code: it renames the nine tables from `<table_prefix><name>` and clears `plugin.table_prefix`. Core 1.4.0 must already be in place, because core 1.3.x refuses a schema plugin that has no `metadata.prefix`.
 
@@ -72,7 +76,7 @@ import {
 
 | Helper | What it does |
 | --- | --- |
-| `tableNames()` | The deployed table names, keyed by short name: `tableNames().post === 'mintphoenix_board_post'`. `TABLE_STEM` is the `mintphoenix_board_` stem. |
+| `tableNames()` | The deployed table names, keyed by short name: `tableNames().post === 'engine9_message_board_post'`. `TABLE_STEM` is the `engine9_message_board_` stem. |
 | `ORDER_OLDEST_FIRST` | `'created_at, rowid'`. Use it wherever order is shown (see [Ordering](#ordering)). |
 | `canonicalId(id)` / `uuidFor(seed)` / `isUuid(v)` | Map an id a system already has onto the plugin's uuid, deterministically. A uuid is kept; anything else always gives the same uuid, so a retried write cannot double and a client holding its own id finds the row. |
 | `toSqlTime(ms)` / `fromSqlTime(text)` | Epoch milliseconds to and from the plugin's datetime text (UTC, with a fractional second). Text with no zone is read as UTC. |
@@ -118,7 +122,7 @@ A host that follows these steps gets the plugin's behaviour, whatever its stack.
 - **Unread mentions:**
 
   ```sql
-  SELECT COUNT(*) FROM mintphoenix_board_mention m JOIN mintphoenix_board_post p ON p.id = m.post_id
+  SELECT COUNT(*) FROM engine9_message_board_mention m JOIN engine9_message_board_post p ON p.id = m.post_id
    WHERE m.person_id = :me AND p.deleted_at IS NULL
      AND p.created_at > :last_read AND p.person_id <> :me;
   ```
@@ -203,8 +207,9 @@ node board/helpers.test.mjs
 
 ## Versions
 
-The version is the npm package version in `package.json` (currently 2.0.0), which covers the whole package. Nothing else records it.
+The version is the npm package version in `package.json` (currently 3.0.0), which covers the whole package. Nothing else records it.
 
+- **3.0.0** (breaking): the table stem is `engine9_message_board_` (was `mintphoenix_board_`): `engine9_message_board_post`, ... `tableNames()` and `TABLE_STEM` return the new names. Plugin path (`@mintphoenix/plugins/board`) and settings are unchanged. Existing 2.0.0 installs must run `migrate-3.0.0.sql`. A host that wants a zero-downtime rollout probes for `engine9_message_board_post` and falls back to `mintphoenix_board_post` until the migration has run.
 - **2.0.0** (breaking): tables are self-scoped (`mintphoenix_board_post`, ...) and the plugin no longer sets `metadata.prefix`, per the engine9 plugin guidelines. `metadata.version` is removed. `tableNames()` returns the new names. Requires `@engine9/core` >= 1.4.0 and `@engine9/interfaces` >= 1.8.0. Existing installs must run `migrate-2.0.0.sql` first.
 - **1.6.0**: `helpers.js` (`tableNames`, `ORDER_OLDEST_FIRST`, `canonicalId`, `uuidFor`, `isUuid`, `toSqlTime`, `fromSqlTime`, `parseReactionList`, `DEFAULT_REACTIONS`) and `addedMentions`: the pieces every host was writing for itself. Documented the timestamp-tie ordering rule.
 - **1.5.0**: `handleFor` reads only `displayName` (falling back to `name`); any other name field is ignored. Pass the name you show for someone as `displayName`.
