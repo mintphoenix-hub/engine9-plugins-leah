@@ -4,7 +4,7 @@
 
 Working on it or wiring it in, with or without an assistant? Read [AGENTS.md](../AGENTS.md) for the rules.
 
-It is a **native plugin** (`metadata.unique: true`, `metadata.prefix: 'board'`) that depends on `@engine9/interfaces/person`. It owns the schema, the settings, the console screens and the pure parsing logic. Everything that touches your users, your notifications and your identity stays in your application, so nothing in the plugin assumes a particular product.
+It is a **native plugin** (`metadata.unique: true`, no `metadata.prefix`) that depends on `@engine9/interfaces/person` (`>=1.7.0`). It needs `@engine9/core` 1.4.0 or later and `@engine9/interfaces` 1.8.0 or later. The release version is the npm `package.json` version only; the plugin declares no `metadata.version`. It owns the schema, the settings, the console screens and the pure parsing logic. Everything that touches your users, your notifications and your identity stays in your application, so nothing in the plugin assumes a particular product.
 
 ## Install
 
@@ -22,15 +22,15 @@ It is a **native plugin** (`metadata.unique: true`, `metadata.prefix: 'board'`) 
 
 3. Install onto an account with MCP `plugin` `install` and `path: "@mintphoenix/plugins/board"`. Core deploys the tables, records the plugin row and inserts the [settings](#settings).
 
-### Table names and the prefix
+### Table names
 
-Core gives a native plugin a per-install table prefix, `board_<n>_`, where `<n>` is a counter in hex (for example `board_aaa_`). The names in this document are **base names**; the deployed names are `board_aaa_post`, `board_aaa_reaction` and so on. The prefix is stored on the plugin row, so read it from there rather than hard-coding it:
+Every table is **self-scoped** with the stem `mintphoenix_board_`: `mintphoenix_board_post`, `mintphoenix_board_reaction` and so on. The plugin sets no `metadata.prefix`, so core leaves `plugin.table_prefix` empty and the names in the schema are the deployed names. SQL can use them directly; there is nothing to look up first. `tableNames()` returns them by short name (`tableNames().post === 'mintphoenix_board_post'`). The rest of this document uses the short names (`post`, `mention`) for readability.
 
-```sql
-SELECT table_prefix FROM plugin WHERE path = '@mintphoenix/plugins/board';
-```
+If you deploy to a database core does not manage (for example plain SQLite, or D1 with hand-run migrations), generate the DDL from `board/schema.js` with core's `standardizeSchema` and `buildCreateTable`, then insert the plugin row (empty `table_prefix`) and the settings yourself.
 
-If you deploy to a database core does not manage (for example plain SQLite, or D1 with hand-run migrations), generate the DDL from `board/schema.js` with core's `standardizeSchema` and `buildCreateTable`, using the prefix core would allocate, then insert the plugin row and the settings yourself.
+### Upgrading from 1.x
+
+2.0.0 renames the tables (see [Versions](#versions)). Run [`migrate-2.0.0.sql`](migrate-2.0.0.sql) on each existing install before deploying 2.0.0 code: it renames the nine tables from `<table_prefix><name>` and clears `plugin.table_prefix`. Core 1.4.0 must already be in place, because core 1.3.x refuses a schema plugin that has no `metadata.prefix`.
 
 ## Data Model
 
@@ -72,7 +72,7 @@ import {
 
 | Helper | What it does |
 | --- | --- |
-| `tableNames(prefix)` | The deployed table names for an install: `tableNames('board_aaa_').post === 'board_aaa_post'`. Pass the `table_prefix` from the plugin row. |
+| `tableNames()` | The deployed table names, keyed by short name: `tableNames().post === 'mintphoenix_board_post'`. `TABLE_STEM` is the `mintphoenix_board_` stem. |
 | `ORDER_OLDEST_FIRST` | `'created_at, rowid'`. Use it wherever order is shown (see [Ordering](#ordering)). |
 | `canonicalId(id)` / `uuidFor(seed)` / `isUuid(v)` | Map an id a system already has onto the plugin's uuid, deterministically. A uuid is kept; anything else always gives the same uuid, so a retried write cannot double and a client holding its own id finds the row. |
 | `toSqlTime(ms)` / `fromSqlTime(text)` | Epoch milliseconds to and from the plugin's datetime text (UTC, with a fractional second). Text with no zone is read as UTC. |
@@ -118,7 +118,7 @@ A host that follows these steps gets the plugin's behaviour, whatever its stack.
 - **Unread mentions:**
 
   ```sql
-  SELECT COUNT(*) FROM <prefix>mention m JOIN <prefix>post p ON p.id = m.post_id
+  SELECT COUNT(*) FROM mintphoenix_board_mention m JOIN mintphoenix_board_post p ON p.id = m.post_id
    WHERE m.person_id = :me AND p.deleted_at IS NULL
      AND p.created_at > :last_read AND p.person_id <> :me;
   ```
@@ -162,7 +162,7 @@ None.
 
 ## Segments
 
-None.
+None. The plugin ships no segment definitions, so it adds nothing to the `segment` table and is unaffected by the membership-policy columns (`join_min_level`, `leave_min_level`, `manager_role_id`) that interfaces 1.8.0 adds. A `@group` is the host's: resolve its members from the host's own role segments at write time.
 
 ## Metrics
 
@@ -187,7 +187,7 @@ Declared in `settings.js`, inserted per install on first install, changed later 
 | Name | Type | Default | Purpose |
 | --- | --- | --- | --- |
 | `allow_edit` | boolean | true | Authors may edit their own posts, ideas and comments. |
-| `moderator_delete` | boolean | true | Admins may remove any post; otherwise only the author. |
+| `moderator_delete` | boolean | true | Admins may remove any post; otherwise only the author. "Admin" is the host's decision. With core 1.4.0 roles, that is a person in the `admin` role segment (scope `admin`). |
 | `mention_notifications` | boolean | true | Tell people directly when a post names them. |
 | `reaction_emoji` | string | `👍,❤️,😂,🎉,👀` | Comma-separated emoji offered as reactions. Validate incoming reactions against it. |
 
@@ -198,10 +198,14 @@ The parsing logic has no dependencies:
 ```
 node board/mentions.test.mjs
 node board/tags.test.mjs
+node board/helpers.test.mjs
 ```
 
 ## Versions
 
+The version is the npm package version in `package.json` (currently 2.0.0), which covers the whole package. Nothing else records it.
+
+- **2.0.0** (breaking): tables are self-scoped (`mintphoenix_board_post`, ...) and the plugin no longer sets `metadata.prefix`, per the engine9 plugin guidelines. `metadata.version` is removed. `tableNames()` returns the new names. Requires `@engine9/core` >= 1.4.0 and `@engine9/interfaces` >= 1.8.0. Existing installs must run `migrate-2.0.0.sql` first.
 - **1.6.0**: `helpers.js` (`tableNames`, `ORDER_OLDEST_FIRST`, `canonicalId`, `uuidFor`, `isUuid`, `toSqlTime`, `fromSqlTime`, `parseReactionList`, `DEFAULT_REACTIONS`) and `addedMentions`: the pieces every host was writing for itself. Documented the timestamp-tie ordering rule.
 - **1.5.0**: `handleFor` reads only `displayName` (falling back to `name`); any other name field is ignored. Pass the name you show for someone as `displayName`.
 - **1.4.0**: `isCrew` is now `isExternal` in `handleFor` / `withHandles`: a person the host keeps as a name rather than an account (contractor, volunteer, external collaborator) is addressed by the first word of their display name. Rename the flag when upgrading; there is no alias.
@@ -210,4 +214,4 @@ node board/tags.test.mjs
 - **1.1.0**: `post.deleted_at` (soft delete); `post.context_id` is a string.
 - **1.0.0**: the schema.
 
-Upgrading adds tables and columns only; nothing is renamed or removed.
+Up to 1.6.0, upgrading added tables and columns only. 2.0.0 is the first release that renames tables.

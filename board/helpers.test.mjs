@@ -2,9 +2,10 @@ import { tableNames, ORDER_OLDEST_FIRST, isUuid, uuidFor, canonicalId, toSqlTime
 let pass = 0, fail = 0; const ck = (n, c, d = '') => { console.log(`  ${c ? 'ok  ' : 'FAIL'}  ${n}${d ? ' -> ' + d : ''}`); c ? pass++ : fail++; };
 
 console.log('table names:');
-ck('the prefix is put in front of every base name', tableNames('board_aaa_').post === 'board_aaa_post' && tableNames('board_aaa_').idea_comment === 'board_aaa_idea_comment');
-ck('all nine tables are named', Object.keys(tableNames('x_')).length === 9);
-ck('no prefix, no change', tableNames().post === 'post' && tableNames(null).reaction === 'reaction');
+ck('every table carries the self-scoped stem', tableNames().post === 'mintphoenix_board_post' && tableNames().idea_comment === 'mintphoenix_board_idea_comment');
+ck('an optional prefix goes in front of the stem', tableNames('x_').post === 'x_mintphoenix_board_post');
+ck('all nine tables are named', Object.keys(tableNames()).length === 9);
+ck('null is the same as no prefix', tableNames(null).reaction === 'mintphoenix_board_reaction');
 ck('ties are broken by insertion order', ORDER_OLDEST_FIRST === 'created_at, rowid');
 
 console.log('\nids:');

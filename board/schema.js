@@ -1,8 +1,9 @@
 /**
- * Team message board. Table names here are BASE names: core prefixes them per install with the
- * plugin's table_prefix (metadata.prefix `board`, e.g. board_aaa_post).
+ * Team message board. Every table is self-scoped with the stem `mintphoenix_board_`, so the names
+ * here are the deployed names. The plugin sets no metadata.prefix; core leaves plugin.table_prefix
+ * empty and SQL, transforms and reports can name the tables directly.
  *
- * A post is a row in `post`. A reply is a post with reply_to_id set
+ * A post is a row in `mintphoenix_board_post`. A reply is a post with reply_to_id set
  * (one level of threading): the root post shows its replies
  * underneath, and a new reply brings its thread back to the top via
  * post.last_activity_at on the root.
@@ -19,7 +20,7 @@
  */
 export const tables = [
   {
-    name: 'post',
+    name: 'mintphoenix_board_post',
     columns: {
       id: 'id_uuid',
       person_id: { type: 'person_id', description: 'Author' },
@@ -47,7 +48,7 @@ export const tables = [
     ]
   },
   {
-    name: 'reaction',
+    name: 'mintphoenix_board_reaction',
     columns: {
       id: 'id_uuid',
       post_id: 'foreign_uuid',
@@ -62,7 +63,7 @@ export const tables = [
     ]
   },
   {
-    name: 'mention',
+    name: 'mintphoenix_board_mention',
     columns: {
       id: 'id_uuid',
       post_id: 'foreign_uuid',
@@ -78,7 +79,7 @@ export const tables = [
     ]
   },
   {
-    name: 'post_tag',
+    name: 'mintphoenix_board_post_tag',
     columns: {
       id: 'id_uuid',
       post_id: 'foreign_uuid',
@@ -93,7 +94,7 @@ export const tables = [
     ]
   },
   {
-    name: 'tag_follow',
+    name: 'mintphoenix_board_tag_follow',
     columns: {
       id: 'id_uuid',
       person_id: 'person_id',
@@ -107,7 +108,7 @@ export const tables = [
     ]
   },
   {
-    name: 'read_marker',
+    name: 'mintphoenix_board_read_marker',
     columns: {
       id: 'id_uuid',
       person_id: 'person_id',
@@ -120,7 +121,7 @@ export const tables = [
     ]
   },
   {
-    name: 'idea',
+    name: 'mintphoenix_board_idea',
     columns: {
       id: 'id_uuid',
       person_id: { type: 'person_id', description: 'Who suggested it' },
@@ -146,7 +147,7 @@ export const tables = [
     ]
   },
   {
-    name: 'idea_vote',
+    name: 'mintphoenix_board_idea_vote',
     columns: {
       id: 'id_uuid',
       idea_id: 'foreign_uuid',
@@ -159,7 +160,7 @@ export const tables = [
     ]
   },
   {
-    name: 'idea_comment',
+    name: 'mintphoenix_board_idea_comment',
     columns: {
       id: 'id_uuid',
       idea_id: 'foreign_uuid',

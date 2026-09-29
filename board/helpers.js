@@ -8,12 +8,15 @@
 
 const BASE_TABLES = ['post', 'reaction', 'mention', 'post_tag', 'tag_follow', 'read_marker', 'idea', 'idea_vote', 'idea_comment'];
 
-/* The deployed table names for an install. Core gives a native plugin a prefix (`board_<n>_`) and
-   records it on the plugin row's `table_prefix`; pass that value. Keyed by the base names in
-   schema.js: tableNames('board_aaa_').post === 'board_aaa_post'. */
+/* The deployed table names. Every table is self-scoped with the stem `mintphoenix_board_` and the
+   plugin sets no metadata.prefix, so core's plugin.table_prefix is empty and these names are final.
+   Keyed by the short name: tableNames().post === 'mintphoenix_board_post'. `prefix` is only for a
+   host that copies the tables under another name of its own; leave it out otherwise. */
+export const TABLE_STEM = 'mintphoenix_board_';
+
 export function tableNames(prefix = '') {
   const p = prefix == null ? '' : String(prefix);
-  return Object.fromEntries(BASE_TABLES.map((t) => [t, `${p}${t}`]));
+  return Object.fromEntries(BASE_TABLES.map((t) => [t, `${p}${TABLE_STEM}${t}`]));
 }
 
 /* Read a thread oldest first, and make ties stable. `created_at` is a SQLite datetime, which is
@@ -72,4 +75,4 @@ export function parseReactionList(value, fallback = DEFAULT_REACTIONS) {
   return list.length ? list : fallback;
 }
 
-export default { tableNames, ORDER_OLDEST_FIRST, isUuid, uuidFor, canonicalId, toSqlTime, fromSqlTime, DEFAULT_REACTIONS, parseReactionList };
+export default { TABLE_STEM, tableNames, ORDER_OLDEST_FIRST, isUuid, uuidFor, canonicalId, toSqlTime, fromSqlTime, DEFAULT_REACTIONS, parseReactionList };

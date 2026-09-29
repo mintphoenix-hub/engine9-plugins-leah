@@ -6,11 +6,9 @@ import * as helpers from './helpers.js';
 
 const metadata = {
   name: 'Board',
-  prefix: 'board',
   unique: true,
-  version: '1.6.0',
   dependencies: {
-    '@engine9/interfaces/person': '>=1.0.0'
+    '@engine9/interfaces/person': '>=1.7.0'
   },
   schemas: ['schema.js']
 };

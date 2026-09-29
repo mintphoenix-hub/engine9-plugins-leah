@@ -12,8 +12,8 @@ Read [`board/README.md`](board/README.md) first. It is the contract: data model,
 
 ## Rules
 
-- **Table names are base names, and the deployed names are prefixed.** Core gives a native plugin a per-install prefix (`board_<n>_`) stored on the `plugin` row's `table_prefix`. Read the prefix from that row. Never hard-code `board_aaa_` or any other prefix in application code.
-- **Published table and column names are the standard.** Do not rename or drop them. Add tables and columns, bump the version, and say so in the README's version history. Renaming an option in the pure helpers is a breaking change: bump the version and note it (there are no aliases).
+- **Tables are self-scoped.** Every table carries the stem `mintphoenix_board_` in its name and the plugin sets no `metadata.prefix`, so `plugin.table_prefix` is empty and the names are final. Use `tableNames()`. Do not set `metadata.prefix` (that is the hex allocator, for multi-instance plugins only), and do not add a table without the stem.
+- **Published table and column names are the standard.** Do not rename or drop them. Add tables and columns, bump the version, and say so in the README's version history. The one rename so far is 2.0.0 (self-scoping); it shipped with `board/migrate-2.0.0.sql`, and any future breaking change needs a migration file the same way. Renaming an option in the pure helpers is a breaking change: bump the version and note it (there are no aliases).
 - **People are engine9 `person_id`s.** Authors, reactors, mentioned people, followers and readers are all `person_id`. `0` means "no person record" and such an author is identified by `post.author_name`.
 - **A mention is stored as an id, never as the text typed.** `mention.person_id`, not a name. That keeps names out of anything exported and stops a rename orphaning a mention.
 - **Notification rows are `mention` rows.** A person named directly has `via_tag` null; a person reached by a group or a followed topic has `via_tag` set (`@managers`, `#launch`). One row per person per post. The author is never told about their own post. The unread count is a query over `mention`; do not build a second path.
@@ -27,17 +27,17 @@ Read [`board/README.md`](board/README.md) first. It is the contract: data model,
 
 ## Wiring it in
 
-1. List the package in the site's `engine9.pluginPackages`, run `npx e9core build-plugins`, and install `@mintphoenix/plugins/board` on the account (MCP `plugin` `install`). Core creates the tables under the prefix, records the plugin row and inserts the settings.
-2. Read the prefix from the plugin row. Build the table names from it once per request or cache them per process.
+1. List the package in the site's `engine9.pluginPackages`, run `npx e9core build-plugins`, and install `@mintphoenix/plugins/board` on the account (MCP `plugin` `install`). Core creates the self-scoped tables, records the plugin row (empty `table_prefix`) and inserts the settings.
+2. Use `tableNames()` for the table names; there is no per-install prefix to read.
 3. Follow the posting flow in [`board/README.md`](board/README.md#posting-the-whole-flow): parse mentions and tags with the helpers, work out who each tag reaches, write the `post`, `mention` and `post_tag` rows in one transaction, then notify.
 4. **Apply schema changes before deploying code that needs them**, and make code tolerate the gap: check that a table exists before using a feature that arrived in a later version, so a deploy that runs ahead of its migration degrades instead of failing on an `INSERT`.
-5. Generate DDL for a database core does not manage from `board/schema.js` with core's `standardizeSchema` and `buildCreateTable`, using the prefix core would allocate, and insert the plugin row and settings yourself. Do not hand-write DDL that can drift from the schema.
+5. Generate DDL for a database core does not manage from `board/schema.js` with core's `standardizeSchema` and `buildCreateTable`, and insert the plugin row (empty `table_prefix`) and settings yourself. Do not hand-write DDL that can drift from the schema.
 6. If you copy the helper files into your own repository (for a bundler that only sees your tree), stamp them with the plugin version and re-copy on upgrade instead of editing the copy.
 
 ## Changing the plugin
 
 1. Change `schema.js`, `settings.js`, the helpers or `ui.console.json5`.
-2. Bump `version` in `board/index.js` and `package.json` together, and add a line to the README's version history.
+2. Bump `version` in `package.json` only. It is the sole place the release version lives; never add `metadata.version`. Add a line to the README's version history.
 3. Update `board/README.md`: it is the contract, and code comments are not documentation.
 4. Add or update tests beside the helper (`*.test.mjs`).
 5. Check that core still accepts it: compile it with core's registry (`createPluginRegistry` and `compileRegistryPlugin`) and pass the schema through `standardizeSchema` for the SQLite and MySQL dialects.
@@ -56,10 +56,9 @@ Do not start HTTP servers or apply anything to a shared database unless the pers
 
 ## Pitfalls that have already happened
 
-- A native plugin that ships a schema **must** declare `metadata.prefix`. Without it core refuses the install ("Disallowed plugin"). Tables created unprefixed by hand will not match what core expects.
+- With core 1.3.x, a native plugin that shipped a schema had to declare `metadata.prefix` or install was refused ("Disallowed plugin"). Core 1.4.0 reversed that: a schema without a prefix installs with an empty `table_prefix`. That is why this package needs core 1.4.0 or later.
 - Matching mentions by substring fires inside longer names (`@Meg` inside `@Megan`) and on email addresses. Use the helpers; they have the edge cases covered.
 - Counting notifications from the text of posts instead of `mention` rows makes the unread count disagree with what was sent.
-- Hard-coding a table prefix works until core allocates a different counter on another install.
 - A group that is a stored list goes stale the day someone joins. Resolve it when the post is written.
 
 ## Git
