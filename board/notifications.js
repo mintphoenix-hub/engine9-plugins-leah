@@ -10,8 +10,9 @@
     - each person told is one `mention` row: `via_tag` null when named directly, '@everyone'
       when the post was to everyone. The author is never told, and a person who is both named
       and in everyone is told once, as named;
-    - push is for a message aimed at someone (named, or an explicit @everyone); a post that is
-      only to everyone by default raises the badge and nothing else;
+    - push goes to everyone a post tells: people named directly AND, for a post to everyone (the
+      default), every member. The badge rises for the same people. `everyone_push` can switch
+      the push off for everyone posts, leaving the badge, for a team that finds it too much;
     - the badge is the unread count over `mention` rows (`unreadBadgeSql`), so it can never
       disagree with what was sent.
 */
@@ -45,21 +46,19 @@ const on = (v) => !(v === false || v === 0 || /^(false|0|off|no)$/i.test(String(
 /* Who to push and who to badge for the mention rows just written.
 
    `rows` are `mention` rows ({person_id, via_tag}). `settings` is the plugin's settings
-   (missing ones count as on). `everyoneTagged` is true when the author wrote @everyone in the
-   post (`parseGroupTags(body, ['everyone']).length > 0`). Returns:
+   (missing ones count as on). Returns:
      push   [{person_id, via_tag}]  people to send a push to
      badge  [person_id]             people whose badge count just went up
 
-   Push is for a message aimed at someone, the way messaging tools use it: named directly, or
-   pinged with an explicit @everyone. A post that is only to everyone by default (nobody
-   addressed) raises the badge and sends no push, so a busy board does not buzz the whole team
-   for every post. A person reached by another group or a followed topic also gets the badge
-   and no push; sending one is the host's call, and a person's own "push me for every post"
-   choice is the host's too.
+   Every time a person is named, and every time a post is to everyone (the default), the
+   person gets a push and a badge. A person reached only by another group or a followed topic
+   gets the badge and no push; sending one is the host's call, as is a person's own "push me
+   for everything" preference.
 
    Named directly follows `mention_notifications`, to everyone follows `everyone_notifications`;
-   `push_notifications` and `badge_notifications` switch the two channels. */
-export function notificationPlan(rows = [], settings = {}, { everyoneTagged = false } = {}) {
+   `push_notifications` and `badge_notifications` switch the two channels, and `everyone_push`
+   turns the push off for posts to everyone while keeping the badge. */
+export function notificationPlan(rows = [], settings = {}) {
   const push = [];
   const badge = [];
   const seen = new Set();
@@ -71,7 +70,7 @@ export function notificationPlan(rows = [], settings = {}, { everyoneTagged = fa
     const kindOn = direct ? on(settings.mention_notifications) : everyone ? on(settings.everyone_notifications) : true;
     if (!kindOn) continue;
     if (on(settings.badge_notifications)) badge.push(r.person_id);
-    const aimed = direct || (everyone && everyoneTagged);
+    const aimed = direct || (everyone && on(settings.everyone_push));
     if (aimed && on(settings.push_notifications)) push.push({ person_id: r.person_id, via_tag: direct ? null : r.via_tag });
   }
   return { push, badge };

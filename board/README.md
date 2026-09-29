@@ -165,11 +165,11 @@ Tag names are lower-case ASCII letters, digits, `_` and `-`, starting with a let
 
 ### Push and badge
 
-Push is for a message aimed at someone, as in most messaging tools: a person **named**, or everyone **pinged** with an explicit `@everyone`. A post that is only to everyone by default raises the **badge** and sends no push, so a busy board does not buzz the whole team for every post. The plugin decides who and what; the host sends and draws.
+A person gets a **push and a badge** each time they are **named** in a message, and each time a post is **to everyone**, which is the default (no audience). The plugin decides who and what; the host sends the push and draws the badge. For a team that finds a push on every everyone post too much, `everyone_push` off keeps those to the badge and still pushes a person named directly.
 
 - **To everyone** is the default: `audience_person_ids` null or empty (`isEveryone`). Everyone is the host's group, resolved as a live query when the post is written. `everyoneMentionRows(postId, { audience, everyoneIds, alreadyNotified, authorPersonId })` writes one `via_tag = '@everyone'` row per person, skipping the author and anyone already told, so a person who is named and in everyone is told once, as named. A post with an audience writes none.
 - **Order of writing:** direct mentions, then tag rows, then everyone rows, passing the ids already written as `alreadyNotified` each time.
-- **`notificationPlan(rows, settings)`** turns the rows just written into `{ push: [{person_id, via_tag}], badge: [person_id] }`. Pass `{ everyoneTagged: true }` as the third argument when the author wrote `@everyone` (`parseGroupTags(body, ['everyone']).length > 0`); without it the everyone rows get the badge only. It applies `mention_notifications`, `everyone_notifications`, `push_notifications` and `badge_notifications` (missing settings count as on). A person reached only by another group or a followed topic gets the badge and no push; sending one is the host's call, as is a person's own "push me for every post" preference.
+- **`notificationPlan(rows, settings)`** turns the rows just written into `{ push: [{person_id, via_tag}], badge: [person_id] }`. A person named directly and every person a post to everyone reaches are in both lists; nobody is planned twice, and the author is never in it. It applies `mention_notifications`, `everyone_notifications`, `push_notifications`, `badge_notifications` and `everyone_push` (missing settings count as on). A person reached only by another group or a followed topic gets the badge and no push; sending one is the host's call, as is a person's own "push me for every post" preference.
 - **`notificationText(post, viaTag, max)`** gives the push `{title, body}`: `Ada mentioned you`, `Ada posted to everyone`, `Ada posted to @managers`, with the body on one line and cut at `max` (140).
 - **The badge** is `unreadBadgeSql()`: a count over `mention` rows for `:me` newer than `:last_read`, not deleted, not by them. Direct, everyone and tag rows all count because each is a `mention` row; there is no second path. Recompute it after a post lands, when the person reads (move `read_marker.last_read_at`) and when a post is deleted.
 - A post addressed to specific people (`audience_person_ids` set) tells only the people it names or tags; the plugin does not treat an audience list as a mention.
@@ -207,8 +207,9 @@ Declared in `settings.js`, inserted per install on first install, changed later 
 | `allow_edit` | boolean | true | Authors may edit their own posts, ideas and comments. |
 | `moderator_delete` | boolean | true | Admins may remove any post; otherwise only the author. "Admin" is the host's decision. With core 1.4.0 roles, that is a person in the `admin` role segment (scope `admin`). |
 | `mention_notifications` | boolean | true | Tell people directly when a post names them. |
-| `everyone_notifications` | boolean | true | Count a post to everyone (no audience) as unread for everyone. Badge only; a push needs an explicit `@everyone`. |
-| `push_notifications` | boolean | true | Send a push to people a message is aimed at: named, or pinged with `@everyone`. |
+| `everyone_notifications` | boolean | true | Tell everyone about a post to everyone (no audience, the default): one `mention` row via `@everyone` each, so it raises the badge and, unless `everyone_push` is off, sends a push. |
+| `push_notifications` | boolean | true | Send a push each time a person is named and each time a post is to everyone. |
+| `everyone_push` | boolean | true | Push people about posts to everyone. Off keeps those to the badge; a person named directly is still pushed. |
 | `badge_notifications` | boolean | true | Raise the unread badge for people told by a post. |
 | `reaction_emoji` | string | `👍,❤️,😂,🎉,👀` | Comma-separated emoji offered as reactions. Validate incoming reactions against it. |
 
@@ -227,6 +228,7 @@ node board/helpers.test.mjs
 
 The version is the npm package version in `package.json` (currently 3.1.0), which covers the whole package. Nothing else records it.
 
+- **3.2.0**: a post to everyone (the default) now sends a push as well as the badge, as does every direct mention; 3.1.0 pushed only for a named person or an explicit `@everyone`. New setting `everyone_push` (default on) turns the push off for everyone posts. `notificationPlan` no longer takes `everyoneTagged`. No schema change and no migration.
 - **3.1.0**: push and badge notifications. A post to everyone (no audience, the default) now counts as unread for everyone, as `mention` rows via `@everyone`, and raises the badge; push goes only to people named or pinged with an explicit `@everyone`; `notifications.js` (`isEveryone`, `everyoneMentionRows`, `notificationPlan`, `notificationText`, `unreadBadgeSql`); settings `everyone_notifications`, `push_notifications`, `badge_notifications`. No schema change and no migration.
 - **3.0.0** (breaking): the table stem is `engine9_message_board_` (was `mintphoenix_board_`): `engine9_message_board_post`, ... `tableNames()` and `TABLE_STEM` return the new names. Plugin path (`@mintphoenix/plugins/board`) and settings are unchanged. Existing 2.0.0 installs must run `migrate-3.0.0.sql`. A host that wants a zero-downtime rollout probes for `engine9_message_board_post` and falls back to `mintphoenix_board_post` until the migration has run.
 - **2.0.0** (breaking): tables are self-scoped (`mintphoenix_board_post`, ...) and the plugin no longer sets `metadata.prefix`, per the engine9 plugin guidelines. `metadata.version` is removed. `tableNames()` returns the new names. Requires `@engine9/core` >= 1.4.0 and `@engine9/interfaces` >= 1.8.0. Existing installs must run `migrate-2.0.0.sql` first.

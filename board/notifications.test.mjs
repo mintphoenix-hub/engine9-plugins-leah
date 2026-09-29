@@ -22,21 +22,23 @@ console.log('\nplan:');
     { post_id: 'p1', person_id: 10, via_tag: '#launch' },
   ];
   const plan = notificationPlan(rows, {});
-  ck('default everyone: only the named get a push', plan.push.map((p) => p.person_id).join() === '7', plan.push.map((p) => p.person_id).join());
-  ck('default everyone still raises the badge, as does a topic follower', plan.badge.join() === '7,8,9,10', plan.badge.join());
-  const tagged = notificationPlan(rows, {}, { everyoneTagged: true });
-  ck('an explicit @everyone pushes everyone', tagged.push.map((p) => p.person_id).join() === '7,8,9', tagged.push.map((p) => p.person_id).join());
-  ck('a topic follower gets no push either way', !tagged.push.some((p) => p.person_id === 10));
-  ck('via_tag kept for the text', tagged.push.find((p) => p.person_id === 7).via_tag === null && tagged.push.find((p) => p.person_id === 8).via_tag === '@everyone');
-  const noEveryone = notificationPlan(rows, { everyone_notifications: false }, { everyoneTagged: true });
-  ck('everyone_notifications off skips them', noEveryone.badge.join() === '7,10' && noEveryone.push.map((p) => p.person_id).join() === '7');
-  const noMention = notificationPlan(rows, { mention_notifications: 'false' }, { everyoneTagged: true });
+  ck('a named person and everyone else are all pushed, by default', plan.push.map((p) => p.person_id).join() === '7,8,9', plan.push.map((p) => p.person_id).join());
+  ck('the badge rises for the same people, and for a topic follower', plan.badge.join() === '7,8,9,10', plan.badge.join());
+  ck('a topic follower gets the badge and no push', !plan.push.some((p) => p.person_id === 10));
+  ck('via_tag is kept for the text', plan.push.find((p) => p.person_id === 7).via_tag === null && plan.push.find((p) => p.person_id === 8).via_tag === '@everyone');
+  ck('no explicit @everyone is needed: the default post to everyone pushes', notificationPlan(everyoneMentionRows('p2', { everyoneIds: [1, 2, 3], authorPersonId: 1 }), {}).push.length === 2);
+  const quiet = notificationPlan(rows, { everyone_push: false });
+  ck('everyone_push off: everyone keeps the badge and loses the push', quiet.badge.join() === '7,8,9,10' && quiet.push.map((p) => p.person_id).join() === '7', quiet.push.map((p) => p.person_id).join());
+  const noEveryone = notificationPlan(rows, { everyone_notifications: false });
+  ck('everyone_notifications off skips them entirely', noEveryone.badge.join() === '7,10' && noEveryone.push.map((p) => p.person_id).join() === '7');
+  const noMention = notificationPlan(rows, { mention_notifications: 'false' });
   ck('mention_notifications off skips the named (text setting)', !noMention.badge.includes(7) && noMention.push.map((p) => p.person_id).join() === '8,9');
-  const noPush = notificationPlan(rows, { push_notifications: false }, { everyoneTagged: true });
+  const noPush = notificationPlan(rows, { push_notifications: false });
   ck('push off leaves the badge', noPush.push.length === 0 && noPush.badge.length === 4);
-  const noBadge = notificationPlan(rows, { badge_notifications: false }, { everyoneTagged: true });
+  const noBadge = notificationPlan(rows, { badge_notifications: false });
   ck('badge off leaves the push', noBadge.badge.length === 0 && noBadge.push.length === 3);
-  ck('a person is planned once', notificationPlan([{ person_id: 5, via_tag: null }, { person_id: 5, via_tag: '@everyone' }], {}, { everyoneTagged: true }).push.length === 1);
+  ck('a person is planned once', notificationPlan([{ person_id: 5, via_tag: null }, { person_id: 5, via_tag: '@everyone' }], {}).push.length === 1);
+  ck('the author is never in the plan (everyoneMentionRows skips them)', !everyoneMentionRows('p3', { everyoneIds: [1, 2], authorPersonId: 1 }).some((r) => r.person_id === 1));
 }
 
 console.log('\ntext:');
