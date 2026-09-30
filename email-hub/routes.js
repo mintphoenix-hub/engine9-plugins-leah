@@ -117,7 +117,19 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
     const list = await provider.listCampaigns(), all = list.campaigns, t = now();
     const part = async (fn) => { try { return { ok: true, data: await fn() }; } catch (e) { return { ok: false, error: e instanceof HubError ? e.message : 'That could not be read just now.' }; } };
     const [counts, g30, g90, audience] = await Promise.all([part(() => provider.counts()), part(() => provider.growth(30, t)), part(() => provider.growth(90, t)), provider.audience().catch(() => null)]);
-    return { connected: true, dc: list.dc, audience, campaigns: all, counts, growth30: g30, growth90: g90, email30: { ok: true, data: emailsIn(all, 30, t) }, email90: { ok: true, data: emailsIn(all, 90, t) } };
+    // The service has sent nothing in the period: use the emails kept from the previous provider (the archive) so the figures are
+    // not blank, and say so. Once the service has sends of its own in a period, those are the only ones used.
+    let kept = [];
+    try { kept = store?.listArchive ? await store.listArchive() : []; } catch { kept = []; }
+    const asFraction = (v) => (v == null ? null : Number(v) > 1 ? Number(v) / 100 : Number(v));
+    const keptRows = kept.map((r) => ({ status: 'sent', when: r.sentAt, sent: r.emailsSent, openRate: asFraction(r.openRate), clickRate: asFraction(r.clickRate) }));
+    const emailStats = (days) => {
+      const own = emailsIn(all, days, t);
+      if (own.emails || !keptRows.length) return { ok: true, data: own };
+      const old = emailsIn(keptRows, days, t);
+      return old.emails ? { ok: true, data: { ...old, fromArchive: kept[0].source } } : { ok: true, data: own };
+    };
+    return { connected: true, dc: list.dc, audience, campaigns: all, counts, growth30: g30, growth90: g90, email30: emailStats(30), email90: emailStats(90) };
   }
 
   async function contacts(request, url, method, id, sub) {

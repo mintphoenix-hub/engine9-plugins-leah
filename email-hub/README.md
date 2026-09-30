@@ -186,6 +186,7 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 
 ## Version history
 
+- **3.13.0**: Home and Analytics email figures (sends, open rate, click rate) fall back to the archived emails from a previous provider for any period in which the service has sent nothing of its own, with a note saying so; the service's own figures are the only ones used as soon as it has sends in that period. `overview` marks such a period `fromArchive`. No schema change.
 - **3.12.2**: Touch screens: text-link buttons and the logo delete button get a finger-sized tap area (CSS only).
 - **3.12.1**: Archived emails (kept from a previous provider) get a "View report" page: the figures that were kept (sent to, opened, clicked) beside the email, with a note that no link, unsubscribe or bounce breakdown came with them. UI only.
 - **3.12.0**: `templates` and `defaultTemplate` options (`templates.js`): a draft's review shows the designed email by dropping its message into a copy of the service's template. `campaignContent()` may return `template` (a name); the Kit adapter does. Additive; no schema change.
