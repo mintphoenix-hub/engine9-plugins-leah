@@ -88,7 +88,7 @@ export function createMailchimpProvider({ apiKey, listId, fromName = '', replyTo
   return {
     label: 'Mailchimp',
     mergeTags: { address: '*|LIST:ADDRESSLINE|*', unsubscribe: '*|UNSUB|*', email: '*|EMAIL|*' },
-    capabilities: {},
+    capabilities: { layouts: false, templateChange: false },   // a template is chosen when an email is made; Mailchimp cannot re-wrap a written one
     connected,
     appUrl: (path = '/') => (dc ? `https://${dc}.admin.mailchimp.com${path}` : 'https://mailchimp.com/'),
     editUrl: (c) => c.editUrl,
@@ -105,10 +105,17 @@ export function createMailchimpProvider({ apiKey, listId, fromName = '', replyTo
       const r = await mc(`/reports/${cid(id)}?fields=emails_sent,opens.unique_opens,opens.open_rate,clicks.unique_subscriber_clicks,clicks.click_rate,unsubscribed,bounces.hard_bounces,bounces.soft_bounces`);
       return { recipients: r.emails_sent ?? null, opened: r.opens?.unique_opens ?? null, openRate: r.opens?.open_rate ?? null, clicked: r.clicks?.unique_subscriber_clicks ?? null, clickRate: r.clicks?.click_rate ?? null, unsubscribed: r.unsubscribed ?? null, bounced: (r.bounces?.hard_bounces || 0) + (r.bounces?.soft_bounces || 0) };
     }),
-    createCampaign: guard(async ({ subject, previewText, title, html, to }) => {
+    createCampaign: guard(async ({ subject, previewText, title, html, to, templateId }) => {
       const def = (await mc(`/lists/${list}?fields=campaign_defaults`)).campaign_defaults || {};
       const c = await mc('/campaigns', { method: 'POST', body: { type: 'regular', recipients: recipients(to), settings: { subject_line: subject, preview_text: previewText || '', title: title || subject, from_name: def.from_name || fromName || 'Sender', reply_to: def.from_email || replyTo } } });
-      if (html) await mc(`/campaigns/${c.id}/content`, { method: 'PUT', body: { html } });
+      if (templateId) {
+        // A template's message goes into its editable area. The area's name is the template's own, so ask for it.
+        const sections = (await mc(`/templates/${Number(templateId)}/default-content`)).sections || {};
+        const names = Object.keys(sections);
+        const area = names.find((n) => /body|content|main|std_content/i.test(n)) || names[0];
+        if (!area) { await mc(`/campaigns/${c.id}`, { method: 'DELETE' }).catch(() => {}); throw new HubError('That Mailchimp template has no editable area for a message. Choose another, or edit it in Mailchimp.'); }
+        await mc(`/campaigns/${c.id}/content`, { method: 'PUT', body: { template: { id: Number(templateId), sections: { [area]: html || '' } } } });
+      } else if (html) await mc(`/campaigns/${c.id}/content`, { method: 'PUT', body: { html } });
       return shape(c);
     }),
     updateCampaign: guard(async (id, f) => {
@@ -198,8 +205,13 @@ export function createMailchimpProvider({ apiKey, listId, fromName = '', replyTo
     unsubscribeContact: guard(async (id) => { await mc(`/lists/${list}/members/${hid(id)}`, { method: 'PATCH', body: { status: 'unsubscribed' } }); return { ok: true }; }),
     createTag: guard(async (name) => { const t = await mc(`/lists/${list}/segments`, { method: 'POST', body: { name, static_segment: [] } }); return { tag: { id: t.id, name: t.name, count: 0 } }; }),
     listTemplates: guard(async () => {
-      const d = await mc('/templates?type=user&count=100&fields=templates.id,templates.name');
-      return { templates: (d.templates || []).map((t) => ({ id: String(t.id), name: t.name, isDefault: false })) };
+      const d = await mc('/templates?type=user&count=100&fields=templates.id,templates.name,templates.thumbnail');
+      return { templates: (d.templates || []).map((t) => ({ id: String(t.id), name: t.name, isDefault: false, thumbnail: t.thumbnail || null })) };
+    }),
+    /* Mailchimp keeps a picture of each template; there is no way to fetch its HTML, so the preview is that picture. */
+    templatePreview: guard(async (id) => {
+      const t = await mc(`/templates/${Number(id)}?fields=id,name,thumbnail`);
+      return { name: t.name, imageUrl: t.thumbnail || null };
     }),
     fields: guard(async () => {
       const d = await mc(`/lists/${list}/merge-fields?count=100&fields=merge_fields.tag,merge_fields.name,merge_fields.type,merge_fields.required`);

@@ -154,7 +154,7 @@ export function mountEmailHub(root, options = {}) {
 
   /* ---- Campaigns ---- */
   async function campaigns() {
-    const [d] = await Promise.all([api('/campaigns'), loadLayouts()]);
+    const [d] = await Promise.all([api('/campaigns'), loadLayouts(), loadTemplates()]);
     if (d.connected === false) { st.label = d.label || st.label; main().innerHTML = off(); return; }
     st.all = d.campaigns; st.dc = d.dc || st.dc;
     // Emails carried over from a service that is gone or replaced: read-only, and nothing is shown when there are none.
@@ -197,11 +197,13 @@ export function mountEmailHub(root, options = {}) {
   function panel(c, k) {
     const id = esc(c.id);
     const box = st.mode === 'edit' && k === 'draft' ? `<div class="eh-box"><div class="eh-field"><label for="ed-sub">Subject line</label><input id="ed-sub" type="text" maxlength="150" value="${esc(c.subject)}"></div><div class="eh-field"><label for="ed-pre">Preview text</label><input id="ed-pre" type="text" maxlength="150" value="${esc(c.preview)}"></div><div class="eh-field"><label for="ed-title">Name for your own reference</label><input id="ed-title" type="text" maxlength="100" value="${esc(c.title)}"></div><div class="eh-row"><button class="eh-btn eh-s" type="button" data-act="edit-save" data-id="${id}">Save changes</button><button class="eh-btn eh-o eh-s" type="button" data-act="mode-x">Cancel</button></div></div>`
+      : st.mode === 'template' && k === 'draft' && st.caps.templateChange && st.tpls?.length > 1 ? templateBox(c)
       : st.mode === 'schedule' && k === 'draft' ? scheduleBox(c)
       : st.mode === 'test' && st.caps.test ? `<div class="eh-box"><div class="eh-field"><label for="ts-to">Send a test to (up to three addresses, separated by commas)</label><input id="ts-to" type="text" autocomplete="off"></div><div class="eh-row"><button class="eh-btn eh-s" type="button" data-act="test-send" data-id="${id}">Send test</button><button class="eh-btn eh-o eh-s" type="button" data-act="mode-x">Cancel</button></div><p class="eh-small eh-muted" style="margin:.5rem 0 0">A test goes only to these addresses, never to your list.</p></div>`
       : st.mode === 'delete' && k === 'draft' ? `<div class="eh-box"><p style="margin:0 0 .7rem">Delete the draft &ldquo;${esc(c.subject || c.title || 'untitled')}&rdquo;? This cannot be undone.</p><div class="eh-row"><button class="eh-btn eh-danger eh-s" type="button" data-act="del" data-id="${id}">Delete draft</button><button class="eh-btn eh-o eh-s" type="button" data-act="mode-x">Cancel</button></div></div>` : '';
     const acts = [];
     if (k === 'draft') acts.push(`<button class="eh-btn eh-s" type="button" data-act="m-schedule" data-id="${id}">Schedule</button>`, `<button class="eh-btn eh-o eh-s" type="button" data-act="m-edit" data-id="${id}">Edit details</button>`);
+    if (k === 'draft' && st.caps.templateChange && st.tpls?.length > 1) acts.push(`<button class="eh-btn eh-o eh-s" type="button" data-act="m-template" data-id="${id}">Change design</button>`);
     if (k === 'scheduled') acts.push(`<button class="eh-btn eh-o eh-s" type="button" data-act="unsched" data-id="${id}">Unschedule</button>`);
     if (st.caps.test) acts.push(`<button class="eh-btn eh-o eh-s" type="button" data-act="m-test" data-id="${id}">Send a test</button>`);
     acts.push(`<button class="eh-btn eh-o eh-s" type="button" data-act="dup" data-id="${id}">Duplicate</button>`);
@@ -237,7 +239,7 @@ export function mountEmailHub(root, options = {}) {
     const f = root.querySelector(`[data-frame="${id}"]`); if (!f) return;
     f.addEventListener('load', () => { fit(f); picturesNote(f); });
     const own = findEmail(id);
-    try { const d = await api(own?.archive ? `/archive/${own.source}/${own.sourceId}/content` : `/campaigns/${id}/content`); f.srcdoc = d.designed || d.html || '<p style="font-family:sans-serif;padding:1rem">No content yet.</p>'; const bare = !own?.archive && !d.designed && d.html && !/background|bgcolor/i.test(d.html); const box = f.closest('.eh-frame-box'); if (box && !box.querySelector('.eh-bare')) box.insertAdjacentHTML('beforeend', bare ? `<p class="eh-bare eh-small eh-muted" style="padding:.6rem .8rem;margin:0">This is the message text only. The full designed email can be previewed on ${esc(st.label)} or via test email.</p>` : ''); }
+    try { const d = await api(own?.archive ? `/archive/${own.source}/${own.sourceId}/content` : `/campaigns/${id}/content`); if (d.templateId) (st.tplOf = st.tplOf || {})[id] = d.templateId; f.srcdoc = d.designed || d.html || '<p style="font-family:sans-serif;padding:1rem">No content yet.</p>'; const bare = !own?.archive && !d.designed && d.html && !/background|bgcolor/i.test(d.html); const box = f.closest('.eh-frame-box'); if (box && !box.querySelector('.eh-bare')) box.insertAdjacentHTML('beforeend', bare ? `<p class="eh-bare eh-small eh-muted" style="padding:.6rem .8rem;margin:0">This is the message text only. The full designed email can be previewed on ${esc(st.label)} or via test email.</p>` : ''); }
     catch (err) { f.srcdoc = `<p style="font-family:sans-serif;padding:1rem">${esc(err.message)}</p>`; }
     const own2 = findEmail(id);
     if (own2 && kindOf(own2) === 'draft' && st.layouts?.enabled) {         // a draft made from a layout can be changed by editing its fields
@@ -257,6 +259,7 @@ export function mountEmailHub(root, options = {}) {
     if (action === 'm-preview') return open(null);
     if (action === 'm-schedule') return open('schedule');
     if (action === 'm-edit') return open('edit');
+    if (action === 'm-template') return open('template');
     if (action === 'm-test') return open('test');
     if (action === 'm-delete') return open('delete');
     const msg = () => $('#eh-rowmsg');
@@ -265,6 +268,7 @@ export function mountEmailHub(root, options = {}) {
     if (action === 'edit-save') busy(async () => { const d = await api(`/campaigns/${id}`, { method: 'PATCH', body: JSON.stringify({ subject: $('#ed-sub').value, previewText: $('#ed-pre').value, title: $('#ed-title').value }) }); Object.assign(c, d.campaign); back('Details saved.'); });
     else if (action === 'test-send') busy(async () => { const d = await api(`/campaigns/${id}/test`, { method: 'POST', body: JSON.stringify({ emails: $('#ts-to').value.split(/[\s,;]+/).filter(Boolean) }) }); say(msg(), `Test sent to ${d.sentTo.join(', ')}.`); });
     else if (action === 'dup') busy(async () => { const d = await api(`/campaigns/${id}/duplicate`, { method: 'POST' }); const l = await api('/campaigns'); st.all = l.campaigns; st.open = d.campaign.id; const made = (await loadLayouts()).enabled ? await api(`/campaigns/${d.campaign.id}/layout`).catch(() => null) : null; if (made?.layout) { st.filter = 'draft'; st.page = 'campaigns'; st.sub = 'new'; return editFields(d.campaign.id, true); } back('Copied. The copy is a draft; nothing has been sent.', 'draft'); });
+    else if (action === 'tpl-save') busy(async () => { const v = $('#tp-sel').value; await api(`/campaigns/${id}`, { method: 'PATCH', body: JSON.stringify({ templateId: v }) }); (st.tplOf = st.tplOf || {})[id] = v; back('Design changed.'); });
     else if (action === 'del') busy(async () => { await api(`/campaigns/${id}`, { method: 'DELETE' }); st.all = st.all.filter((x) => x.id !== id); st.open = null; back('Draft deleted.'); });
     else if (action === 'unsched') busy(async () => { const d = await api(`/campaigns/${id}/unschedule`, { method: 'POST' }); Object.assign(c, d.campaign); st.open = id; back('Unscheduled. It is a draft again and will not be sent.', 'draft'); });
     else if (action === 'sched') busy(async () => { const at = whenAt($('#eh-when').value); const d = await api(`/campaigns/${id}/schedule`, { method: 'POST', body: JSON.stringify({ sendAt: new Date(at).toISOString(), confirm: $('#eh-ok').checked }) }); Object.assign(c, d.campaign); st.open = null; back(`Scheduled. It will go out ${when(d.scheduledFor)}. You can unschedule it until then.`, 'scheduled'); });
@@ -291,12 +295,12 @@ export function mountEmailHub(root, options = {}) {
   /* ---- Create email ---- */
   const step = (n, title, hint, inner) => `<section class="eh-step"><div class="eh-step-h"><span class="eh-stepn" aria-hidden="true">${n}</span><div><h3>${title}</h3>${hint ? `<p>${hint}</p>` : ''}</div></div>${inner}</section>`;
   async function compose() {
-    await loadLayouts();
+    await Promise.all([loadLayouts(), loadTemplates()]);
     let kept = null; try { kept = JSON.parse(localStorage.getItem(draftKey) || 'null'); } catch { /* no storage */ }
     const restored = Boolean(kept && (kept.s || kept.x || kept.h)); st.last = 'eh-sub'; st.bodyMode = kept?.mode === 'html' ? 'html' : 'text';
     main().innerHTML = head('Create email', `Write it here, see it as an inbox will, and save it as a draft in ${st.label}. Nothing goes out until you schedule it.`, '<button class="eh-btn eh-o eh-s" type="button" data-act="nav" data-page="campaigns">&larr; All campaigns</button>') + kindTabs('text') + `<div class="eh-comp"><div class="eh-comp-l">
       ${restored ? '<p class="eh-flash" role="status" style="margin:0">Picked up where you left off. <button type="button" class="eh-link" data-act="fresh">Start a new one</button></p>' : ''}
-      ${step(1, 'Who it is for', 'Everyone on your list, or one group.', '<div class="eh-field" style="margin:0"><label for="eh-to">Send to</label><select id="eh-to"><option value="">Everyone on your list</option></select><p class="eh-small" id="eh-to-n" style="margin:.5rem 0 0"></p></div>')}
+      ${step(1, 'Who it is for', 'Everyone on your list, or one group.', '<div class="eh-field" style="margin:0"><label for="eh-to">Send to</label><select id="eh-to"><option value="">Everyone on your list</option></select><p class="eh-small" id="eh-to-n" style="margin:.5rem 0 0"></p></div>' + templatePicker(st.newTemplate))}
       ${step(2, 'Subject and preview', 'The two lines a person reads before they open it.', `<div class="eh-field"><div class="eh-lab"><label for="eh-sub">Subject line</label><span class="eh-count" id="eh-sub-n"></span></div><input id="eh-sub" type="text" maxlength="150" autocomplete="off" style="font-size:calc(1.05rem*var(--eh-scale,1))"></div>
         <div class="eh-field"><div class="eh-lab"><label for="eh-pre">Preview text</label><span class="eh-count" id="eh-pre-n"></span></div><input id="eh-pre" type="text" maxlength="150" autocomplete="off" placeholder="The line after the subject in an inbox"></div>
         <div class="eh-emoji-box"><button type="button" class="eh-link eh-emoji-toggle" data-act="emoji-toggle" aria-expanded="${emojiOpen}" aria-controls="eh-emoji-tray"><span aria-hidden="true">&#128578;</span> Add an emoji <span class="eh-caret" aria-hidden="true">&#9662;</span></button><div id="eh-emoji-tray" class="${emojiOpen ? '' : 'eh-hide'}"><p class="eh-small eh-muted" style="margin:.6rem 0 0">Goes wherever you were last typing.</p><div class="eh-emoji" role="group" aria-label="Emoji">${emoji.map((x) => `<button type="button" data-act="emoji" aria-label="Add ${x}">${x}</button>`).join('')}</div><p class="eh-small eh-muted" style="margin:.5rem 0 0">For any other emoji: on a Mac press Control + Command + Space; on Windows press the Windows key + period.</p></div>`)}
@@ -343,12 +347,27 @@ export function mountEmailHub(root, options = {}) {
   async function saveDraft(btn) {
     const msg = $('#eh-msg'); btn.disabled = true; say(msg, `Saving to ${st.label}…`);
     try {
-      const d = await api('/campaigns', { method: 'POST', body: JSON.stringify({ subject: $('#eh-sub').value, previewText: $('#eh-pre').value, title: $('#eh-title').value, ...(st.bodyMode === 'html' ? { html: $('#eh-html').value } : { text: $('#eh-text').value }), to: $('#eh-to').value }) });
+      const tpl = $('#eh-tpl')?.value, dflt = st.tpls?.find((x) => x.isDefault)?.id || '';
+      const d = await api('/campaigns', { method: 'POST', body: JSON.stringify({ subject: $('#eh-sub').value, previewText: $('#eh-pre').value, title: $('#eh-title').value, ...(st.bodyMode === 'html' ? { html: $('#eh-html').value } : { text: $('#eh-text').value }), to: $('#eh-to').value, ...(tpl && String(tpl) !== String(dflt) ? { templateId: tpl } : {}) }) });
+      st.newTemplate = '';
       try { localStorage.removeItem(draftKey); } catch { /* nothing to clear */ }
       st.filter = 'draft'; st.open = d.campaign.id; st.mode = null; st.page = 'campaigns'; st.sub = ''; renderNav();
       await campaigns(); flash(`Saved as a draft in ${st.label}. Have a look, send yourself a test, then schedule it when you are happy.` + (d.warnings?.length ? ' Worth a look first: ' + d.warnings.join(' ') : ''));
     } catch (err) { say(msg, err.message, true); btn.disabled = false; }
   }
+
+  /* ---- Templates: the service's own designs, chosen for an email ---- */
+  async function loadTemplates() {
+    if (st.tpls) return st.tpls;
+    if (!st.caps.templates) return (st.tpls = []);
+    try { st.tpls = (await api('/templates')).templates || []; } catch { st.tpls = []; }
+    return st.tpls;
+  }
+  /* "Design" chooser for a new email. Only when there is a real choice. */
+  const templatePicker = (selected = '') => (st.tpls?.length > 1 || (st.tpls?.length === 1 && !st.tpls[0].isDefault)
+    ? `<div class="eh-field" style="margin:.9rem 0 0"><label for="eh-tpl">Design</label><select id="eh-tpl">${st.tpls.some((t) => t.isDefault) ? '' : `<option value=""${selected ? '' : ' selected'}>Standard (no template)</option>`}${st.tpls.map((t) => `<option value="${esc(t.id)}"${String(t.id) === String(selected || st.tpls.find((x) => x.isDefault)?.id || '') ? ' selected' : ''}>${esc(t.name)}${t.isDefault ? ' (default)' : ''}</option>`).join('')}</select><p class="eh-small eh-muted" style="margin:.4rem 0 0">The ${esc(st.label)} template it is sent in. Most emails use the default. See them all under Content.</p></div>`
+    : '');
+  const templateBox = (c) => `<div class="eh-box"><div class="eh-field"><label for="tp-sel">Design this email is sent in</label><select id="tp-sel">${(st.tpls || []).map((t) => `<option value="${esc(t.id)}"${String(t.id) === String(st.tplOf?.[c.id]) ? ' selected' : ''}>${esc(t.name)}${t.isDefault ? ' (default)' : ''}</option>`).join('')}</select></div><div class="eh-row"><button class="eh-btn eh-s" type="button" data-act="tpl-save" data-id="${esc(c.id)}">Use this design</button><button class="eh-btn eh-o eh-s" type="button" data-act="mode-x">Cancel</button></div><p class="eh-small eh-muted" style="margin:.5rem 0 0">Changes how ${esc(st.label)} wraps the email. The preview above shows it once saved.</p></div>`;
 
   /* ---- Create email from a host's layout (a show announcement): fields in, the whole email out ---- */
   async function loadLayouts() {
@@ -512,8 +531,8 @@ export function mountEmailHub(root, options = {}) {
     lookPreview();
     if (st.caps.templates) {
       try {
-        const t = await api('/templates'); const list = t.templates || [];
-        $('.eh-main').insertAdjacentHTML('beforeend', `<div class="eh-card" style="margin-top:1.4rem"><h3>Templates in ${esc(st.label)}</h3>${list.length ? `<ul class="eh-people">${list.map((x) => `<li><div class="eh-person eh-static"><span>${esc(x.name)}</span><span></span><span>${x.isDefault ? '<span class="eh-tag">Default</span>' : ''}</span></div></li>`).join('')}</ul>` : '<p class="eh-small eh-muted" style="margin:0">No templates.</p>'}<p class="eh-small eh-muted" style="margin:.8rem 0 0">These live in ${esc(st.label)} and are listed here by name only.</p></div>`);
+        st.tpls = null; const list = await loadTemplates();
+        $('.eh-main').insertAdjacentHTML('beforeend', `<div class="eh-card" style="margin-top:1.4rem"><h3>Templates in ${esc(st.label)}</h3>${list.length ? `<ul class="eh-tpls">${list.map((x) => `<li><span class="eh-tpl-name">${x.thumbnail ? `<img src="${esc(x.thumbnail)}" alt="" width="56" height="56" style="object-fit:cover;object-position:top;border:1px solid var(--eh-rule);border-radius:var(--eh-radius)">` : ''}${esc(x.name)} ${x.isDefault ? '<span class="eh-tag">Default</span>' : ''}</span><span class="eh-row"><button type="button" class="eh-btn eh-o eh-s" data-act="tpl-preview" data-id="${esc(x.id)}">Preview</button><button type="button" class="eh-btn eh-o eh-s" data-act="tpl-use" data-id="${esc(x.id)}">Use for a new email</button></span></li>`).join('')}</ul><div id="tpl-pv"></div>` : '<p class="eh-small eh-muted" style="margin:0">No templates.</p>'}<p class="eh-small eh-muted" style="margin:.8rem 0 0">Designs an email is sent in. Choose one when you create an email, or change a draft&rsquo;s design from its Review. To edit a design, open it in ${esc(st.label)}.</p></div>`);
       } catch { /* the list is a courtesy; the screen works without it */ }
     }
   }
@@ -537,7 +556,20 @@ export function mountEmailHub(root, options = {}) {
     if (a === 'report') { st.reportId = b.dataset.id; return go('campaigns', 'report'); }
     if (a === 'filter') { st.filter = b.dataset.f; st.open = null; st.mode = null; return draw(false); }
     if (a === 'review') { st.open = st.open === b.dataset.id ? null : b.dataset.id; st.mode = null; return draw(false); }
-    if (['m-preview', 'm-schedule', 'm-edit', 'm-test', 'm-delete', 'edit-save', 'test-send', 'dup', 'del', 'unsched', 'sched'].includes(a)) return act(a, b);
+    if (['m-preview', 'm-schedule', 'm-edit', 'm-template', 'tpl-save', 'm-test', 'm-delete', 'edit-save', 'test-send', 'dup', 'del', 'unsched', 'sched'].includes(a)) return act(a, b);
+    if (a === 'tpl-preview') return (async () => {
+      const box = $('#tpl-pv'); if (!box) return; box.innerHTML = '<p class="eh-small eh-muted">Loading&hellip;</p>';
+      try {
+        const d = await api(`/templates/${b.dataset.id}/preview`);
+        box.innerHTML = d.imageUrl
+          ? `<div class="eh-frame-box" style="margin-top:1rem"><div class="eh-frame-head"><small>PICTURE OF THE TEMPLATE</small><b>${esc(d.name)}</b></div><img src="${esc(d.imageUrl)}" alt="${esc(d.name)}" style="display:block;max-width:100%;margin:0 auto"></div>`
+          : d.html
+          ? `<div class="eh-frame-box" style="margin-top:1rem"><div class="eh-frame-head"><small>PREVIEW WITH A SAMPLE MESSAGE</small><b>${esc(d.name)}</b></div><iframe id="tpl-frame" class="eh-frame" sandbox="allow-same-origin" title="Preview of ${esc(d.name)}"></iframe></div>`
+          : `<p class="eh-small eh-muted" style="margin-top:1rem"><b>${esc(d.name)}</b> has no preview copy on this site. Open it in ${esc(st.label)} to see it.</p>`;
+        if (d.html && !d.imageUrl) { const f = $('#tpl-frame'); f.addEventListener('load', () => { fit(f); picturesNote(f); }); f.srcdoc = d.html; f.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+      } catch (err) { box.innerHTML = `<p class="eh-msg eh-bad">${esc(err.message)}</p>`; }
+    })();
+    if (a === 'tpl-use') { st.newTemplate = b.dataset.id; return go('campaigns', 'new'); }
     if (a === 'kind') return b.dataset.kind === 'text' ? compose() : composeLayout(b.dataset.kind);
     if (a === 'save-layout') return saveLayout(b);
     if (a === 'edit-fields') return editFields(b.dataset.id).catch((err) => flash(err.message));

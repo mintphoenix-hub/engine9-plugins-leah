@@ -191,6 +191,26 @@ createEmailHub({ provider, store, layouts: { show: {
 - **Duplicate keeps the template**: the Kit adapter now copies the original's `email_template_id`, so a copy is sent in the same
   design as the original (it used to fall back to the account's default template).
 
+## Choosing and previewing a template
+
+A service's templates are its own designs. The hub lists them (Content), lets a person **pick one when creating an email** (a
+"Design" chooser, beside "Send to"), lets a draft be **moved to another** from its Review ("Change design"), and **previews** each one.
+
+| | Kit | Mailchimp |
+| --- | --- | --- |
+| List | `GET /email_templates`, one is the account default | user templates, with the picture Mailchimp keeps of each |
+| Pick when creating | `email_template_id` on the broadcast | the message goes into the template's editable area (its first body-like section) |
+| Move a draft to another | yes (`capabilities.templateChange`) | no: Mailchimp cannot re-wrap a written email, so the button is not shown |
+| Preview | the host's copy of the template (below), around a sample message | the picture Mailchimp keeps (`templatePreview`) |
+| Duplicate | keeps the template (`email_template_id` is copied) | keeps it (Mailchimp's replicate copies everything) |
+
+- Kit's API returns a template's name but never its HTML, so for a preview the host gives the hub copies:
+  `createEmailHub({ templates: { 'Template name': '<html>…{{ message_content }}…</html>' }, defaultTemplate: 'Template name' })`. Without a
+  copy the preview says so and links to the template in the service; the hub never guesses.
+- `GET /templates/:id/preview` returns `{ name, isDefault, html | imageUrl }`. `PATCH /campaigns/:id { templateId }` needs
+  `capabilities.templateChange`; a template that is not in the service's own list is refused.
+- A provider adds `templatePreview(id)` (optional) to show one itself, and returns `thumbnail` from `listTemplates`.
+
 ## Options a host may set
 
 Everything below is optional and defaults to the neutral behavior, so a site that sets none of it is unchanged.
@@ -242,6 +262,7 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 
 ## Version history
 
+- **3.16.0**: Choosing and previewing templates, for Kit and Mailchimp: a "Design" chooser on Create email, "Change design" on a draft (where the service can), and a clickable Templates list on Content with a preview (the host's copy for Kit, Mailchimp's own picture). Mailchimp: a new email can be made in a user template; `listTemplates` returns `thumbnail`; `templatePreview`. New `capabilities.templateChange` (Kit and memory: true; Mailchimp: false), `templateSample` option. The memory provider lists two templates. No schema change.
 - **3.15.0**: Layouts (`layouts.js`): `layouts` and `layoutTemplateId` options, Create email offers "New show"-style layouts beside "Write it", a live preview, editing a draft by its fields, and Duplicate opening the copy with every field filled in. New table `engine9_email_hub_layout` (`migrate-3.15.0.sql`; additive). `capabilities.layouts` (Kit, memory). Kit: a duplicate keeps the original's template; `createCampaign` takes `templateId`; `updateCampaign` takes `html`.
 - **3.14.0**: The review explains missing pictures in the preview (the host's `img-src` rule) and the README says how to fix it. Paste HTML (`pasted.js`): Create email can take a finished email as HTML, cleaned and checked (must have the unsubscribe tag), sent as pasted. `GET /config` adds `mergeTags`; `POST /campaigns` accepts `html` and may return `warnings`. Additive; no schema change.
 - **3.13.0**: Home and Analytics email figures (sends, open rate, click rate) fall back to the archived emails from a previous provider for any period in which the service has sent nothing of its own, with a note saying so; the service's own figures are the only ones used as soon as it has sends in that period. `overview` marks such a period `fromArchive`. No schema change.

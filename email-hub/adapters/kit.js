@@ -123,7 +123,7 @@ export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, 
   return {
     label: 'Kit',
     mergeTags: { address: '{{ address }}', unsubscribe: '{{ unsubscribe_url }}', email: '{{ subscriber.email_address }}' },
-    capabilities: { import: false, checklist: false, test: false, layouts: true },
+    capabilities: { import: false, checklist: false, test: false, layouts: true, templateChange: true },
     connected: () => Boolean(key),
     appUrl: (path = '/') => `${appUrl}${path === '/' ? '' : path}`,
     editUrl: (c) => c.editUrl,
@@ -153,7 +153,7 @@ export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, 
       const st = b.status === 'completed' || b.status === 'sending' ? statsOf(await kit(`/broadcasts/${id(cid)}/stats`).catch(() => null)) : null;
       return shape(b, st);
     }),
-    campaignContent: guard(async (cid) => { const b = (await kit(`/broadcasts/${id(cid)}`))?.broadcast; return { html: b?.content || '', text: '', template: b?.email_template?.name || null }; }),
+    campaignContent: guard(async (cid) => { const b = (await kit(`/broadcasts/${id(cid)}`))?.broadcast; return { html: b?.content || '', text: '', templateId: b?.email_template?.id != null ? String(b.email_template.id) : null, template: b?.email_template?.name || null }; }),
     campaignReport: guard(async (cid) => {
       const s = statsOf(await kit(`/broadcasts/${id(cid)}/stats`));
       return { recipients: s.recipients, opened: s.opened, openRate: s.openRate, clicked: s.clicked, clickRate: s.clickRate, unsubscribed: s.unsubscribes, bounced: null };
@@ -168,6 +168,7 @@ export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, 
       if (f.previewText !== undefined) body.preview_text = f.previewText;
       if (f.title !== undefined) body.description = f.title;
       if (f.html !== undefined) body.content = f.html;
+      if (f.templateId !== undefined) body.email_template_id = Number(f.templateId) || f.templateId;
       return shape((await kit(`/broadcasts/${id(cid)}`, { method: 'PUT', body }))?.broadcast || {});
     }),
     deleteCampaign: guard(async (cid) => { await kit(`/broadcasts/${id(cid)}`, { method: 'DELETE' }); return {}; }),

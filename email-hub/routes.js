@@ -29,9 +29,9 @@ export function parseTo(to) {
   return m[1] === 't' ? { tagId: m[2] } : { segmentId: m[2] };
 }
 
-const ROUTE = /^\/(campaigns|audience|overview|contacts|tags|fields|import|look|config|templates|layouts)(?:\/([A-Za-z0-9_-]+))?(?:\/(content|duplicate|schedule|unschedule|test|checklist|report|tags|unsubscribe|render|layout))?$/;
+const ROUTE = /^\/(campaigns|audience|overview|contacts|tags|fields|import|look|config|templates|layouts)(?:\/([A-Za-z0-9_-]+))?(?:\/(content|duplicate|schedule|unschedule|test|checklist|report|tags|unsubscribe|render|layout|preview))?$/;
 
-export function createEmailHub({ provider, brand = {}, store = null, now = () => Date.now(), schedule = {}, people = null, templates = null, defaultTemplate = '', layouts = null, layoutTemplateId = '' } = {}) {
+export function createEmailHub({ provider, brand = {}, store = null, now = () => Date.now(), schedule = {}, people = null, templates = null, defaultTemplate = '', layouts = null, layoutTemplateId = '', templateSample = '' } = {}) {
   checkLayouts(layouts);
   const rules = scheduleRules(schedule);
   assertProvider(provider);
@@ -49,6 +49,14 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
     return c;
   };
 
+  /* The id of a template that exists in the service (so a made-up one cannot be sent), or '' for "the service's default". */
+  const knownTemplate = async (value) => {
+    if (value == null || value === '') return '';
+    need('templates');
+    const found = ((await provider.listTemplates()).templates || []).find((t) => String(t.id) === String(value));
+    if (!found) throw new HubError(`That template is not in ${provider.label}.`, 422);
+    return String(found.id);
+  };
   /* What a host layout's render() is given. */
   const layoutCtx = async () => ({ style: await loadStyle(), mergeTags: provider.mergeTags, brand, siteUnsubscribe: unsubscribeLink(brand.unsubscribePage, provider) || '' });
   const layoutsOn = () => Boolean(layouts && Object.keys(layouts).length && caps.layouts && store?.saveLayout);
@@ -91,7 +99,8 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
       if (!text.trim()) throw new HubError('An email needs some words in it.');
       html = bodyHtml(text, { style: await loadStyle(), address: provider.mergeTags.address, unsubscribe: provider.mergeTags.unsubscribe, siteUnsubscribe: unsubscribeLink(brand.unsubscribePage, provider) || '', brand });
       }
-      const c = await provider.createCampaign({ subject, previewText: clip(b.previewText, 150).trim(), title: clip(b.title, 100).trim(), html, to: parseTo(b.to) });
+      const tid = await knownTemplate(b.templateId);
+      const c = await provider.createCampaign({ subject, previewText: clip(b.previewText, 150).trim(), title: clip(b.title, 100).trim(), html, to: parseTo(b.to), ...(tid ? { templateId: tid } : {}) });
       return json(200, { campaign: c, ...(warnings.length ? { warnings } : {}) });
     }
     if (id && !action) {
@@ -102,6 +111,7 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
         if (typeof b.subject === 'string') { if (!b.subject.trim()) throw new HubError('An email needs a subject line.'); f.subject = clip(b.subject, 150).trim(); }
         if (typeof b.previewText === 'string') f.previewText = clip(b.previewText, 150).trim();
         if (typeof b.title === 'string' && b.title.trim()) f.title = clip(b.title, 100).trim();
+        if (b.templateId !== undefined) { need('templateChange'); if (b.templateId === '' || b.templateId == null) throw new HubError('Choose a template.'); f.templateId = await knownTemplate(b.templateId); }
         if (b.layoutValues && typeof b.layoutValues === 'object') {   // the fields of an email made from a layout: re-render the whole email
           const kept = layoutsOn() ? await store.getLayout(id) : null, lay = kept && layouts[kept.layout];
           if (!lay) throw new HubError('That email was not made from a layout, so it has no fields to edit.', 409);
@@ -262,6 +272,18 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
       if (area === 'campaigns') return await campaigns(request, method, id, sub);
       if (area === 'contacts') return await contacts(request, url, method, id, sub);
       if (area === 'tags' && method === 'POST') { need('tags'); const n = clip((await readBody(request)).name, 100).trim(); if (!n) throw new HubError('Give the tag a name.'); return json(200, await provider.createTag(n)); }
+      if (area === 'templates' && method === 'GET' && id && sub === 'preview') {   // a template as it looks around a sample message, from the host's copy
+        need('templates');
+        const found = ((await provider.listTemplates()).templates || []).find((t) => String(t.id) === String(id));
+        if (!found) throw new HubError('That template is not in ' + provider.label + '.', 404);
+        if (provider.templatePreview) {                     // the service can show one itself (Mailchimp keeps a picture of each)
+          const own = await provider.templatePreview(id).catch(() => null);
+          if (own && (own.imageUrl || own.html)) return json(200, { name: found.name, isDefault: Boolean(found.isDefault), imageUrl: own.imageUrl || null, html: own.html || null });
+        }
+        const copy = pickTemplate(templates, found.name);
+        const style = await loadStyle();
+        return json(200, { name: found.name, isDefault: Boolean(found.isDefault), html: copy ? renderTemplate(copy.html, { message: templateSample || '<p style="font-family:Helvetica,Arial,sans-serif;font-size:17px;line-height:1.7;margin:0;">Your message appears here.</p>', address: style.address || brand.address || 'Your postal address' }) : null });
+      }
       if (area === 'templates' && method === 'GET') { need('templates'); return json(200, await provider.listTemplates()); }
       if (area === 'fields' && method === 'GET') { need('fields'); return json(200, await provider.fields()); }
       if (area === 'import' && method === 'POST') {

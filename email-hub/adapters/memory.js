@@ -11,6 +11,7 @@ import { HubError } from '../provider.js';
 const EMAIL = /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[a-z]{2,}$/i;
 
 export function createMemoryProvider({ now = () => Date.now() } = {}) {
+  const TEMPLATES = [{ id: 't1', name: 'Plain', isDefault: true }, { id: 't2', name: 'Designed', isDefault: false }];
   let seq = 1;
   const nid = () => String(seq++);
   const contacts = new Map(), tags = new Map(), campaigns = new Map();
@@ -25,7 +26,7 @@ export function createMemoryProvider({ now = () => Date.now() } = {}) {
   const p = {
     label: 'Memory',
     mergeTags: { address: '{{ address }}', unsubscribe: '{{ unsubscribe_url }}', email: '{{ email }}' },
-    capabilities: { layouts: true },
+    capabilities: { layouts: true, templateChange: true },
     connected: () => true,
     appUrl: () => 'https://memory.invalid/',
     editUrl: () => null,
@@ -44,9 +45,10 @@ export function createMemoryProvider({ now = () => Date.now() } = {}) {
 
     listCampaigns: async () => ({ total: campaigns.size, campaigns: [...campaigns.values()].sort((a, b) => String(b.created).localeCompare(String(a.created))).map(shape) }),
     getCampaign: async (id) => shape(camp(id)),
-    campaignContent: async (id) => ({ html: camp(id).html || '', text: '' }),
-    createCampaign: async ({ subject, previewText, title, html, to }) => { const id = nid(); const c = { id, status: 'save', subject, preview: previewText || '', title: title || subject, html: html || '', to: to || {}, created: iso() }; campaigns.set(id, c); return shape(c); },
-    updateCampaign: async (id, f) => { const c = camp(id); if (f.subject !== undefined) c.subject = f.subject; if (f.previewText !== undefined) c.preview = f.previewText; if (f.title !== undefined) c.title = f.title; if (f.html !== undefined) c.html = f.html; return shape(c); },
+    campaignContent: async (id) => { const c = camp(id), t = TEMPLATES.find((x) => x.id === c.templateId) || TEMPLATES.find((x) => x.isDefault); return { html: c.html || '', text: '', templateId: t.id, template: t.name }; },
+    listTemplates: async () => ({ templates: TEMPLATES.map((t) => ({ ...t })) }),
+    createCampaign: async ({ subject, previewText, title, html, to, templateId }) => { const id = nid(); const c = { id, status: 'save', subject, preview: previewText || '', title: title || subject, html: html || '', to: to || {}, created: iso(), ...(templateId ? { templateId: String(templateId) } : {}) }; campaigns.set(id, c); return shape(c); },
+    updateCampaign: async (id, f) => { const c = camp(id); if (f.subject !== undefined) c.subject = f.subject; if (f.previewText !== undefined) c.preview = f.previewText; if (f.title !== undefined) c.title = f.title; if (f.html !== undefined) c.html = f.html; if (f.templateId !== undefined) c.templateId = String(f.templateId); return shape(c); },
     deleteCampaign: async (id) => { camp(id); campaigns.delete(String(id)); return {}; },
     duplicateCampaign: async (id) => { const s = camp(id); const n = nid(); const c = { ...s, id: n, status: 'save', when: null, sent: null, openRate: null, clickRate: null, created: iso(), title: `${s.title} (copy)` }; campaigns.set(n, c); return shape(c); },
     schedule: async (id, at) => { const c = camp(id); c.status = 'schedule'; c.when = at; return {}; },

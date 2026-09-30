@@ -69,7 +69,8 @@ console.log('templates and contact history');
   assert.equal((await plain.contact('9')).joined, '2020-01-01', 'no configured field: the neutral default');
   const hub = createEmailHub({ provider: kit, brand: {} });
   const t = await call(hub, 'GET', '/templates'); assert.deepEqual([t.status, t.body.templates.length], [200, 2]);
-  assert.equal((await call(createEmailHub({ provider: createMemoryProvider(), brand: {} }), 'GET', '/templates')).status, 405, 'a provider with none says so');
+  const noTemplates = createMemoryProvider(); delete noTemplates.listTemplates;
+  assert.equal((await call(createEmailHub({ provider: noTemplates, brand: {} }), 'GET', '/templates')).status, 405, 'a provider with none says so');
   assert.equal(capabilitiesOf(createMailchimpProvider({ apiKey: 'a'.repeat(32) + '-us1', listId: 'L' })).templates, true);
   ok('templates are listed by name where the service offers them, and a person\'s original signup date and source come from the fields the host names');
 }

@@ -228,3 +228,4 @@
   .eh-link{display:inline-flex;align-items:center;min-height:2.6rem}
   .eh-logo-x{width:2.4rem;height:2.4rem}
 }
+.eh-tpls{list-style:none;margin:0;padding:0}.eh-tpls li{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center;justify-content:space-between;padding:.7rem 0;border-top:1px solid var(--eh-rule)}.eh-tpls li:first-child{border-top:0}.eh-tpl-name{display:inline-flex;gap:.6rem;align-items:center;flex-wrap:wrap}

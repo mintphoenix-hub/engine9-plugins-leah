@@ -10,6 +10,8 @@
     mergeTags                   { address, unsubscribe }   what the service replaces in the footer
     connected()                 boolean
     appUrl(path)                a link into the service's own website, for "Open in ..."
+    listTemplates()             { templates: [{ id, name, isDefault, thumbnail? }] }   (optional; capabilities.templates)
+    templatePreview(id)         { name, imageUrl? | html? }   (optional) a picture or the HTML of one template; a host may also give the hub copies
     listCampaigns()             { campaigns: [Campaign], dc? }
     getCampaign(id)             Campaign, freshly read
     campaignContent(id)         { html, template? }   template: the name of the service-side template the email is sent in, when it has one
@@ -64,7 +66,7 @@ export function capabilitiesOf(p) {
   const c = {
     checklist: has('sendChecklist'), test: has('sendTest'), report: has('campaignReport'),
     contacts: has('listContacts', 'contact'), tags: has('createTag', 'tagContact'), segments: true, fields: has('fields'),
-    import: has('importContacts'), editDesign: has('editUrl'), templates: has('listTemplates'), look: true, layouts: false
+    import: has('importContacts'), editDesign: has('editUrl'), templates: has('listTemplates'), look: true, layouts: false, templateChange: false
   };
   return { ...c, ...(p.capabilities || {}) };
 }
