@@ -231,6 +231,20 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
 
   /* Logo uploads and the archive of a previous provider's emails. Only when the store offers them. */
   async function extras(request, path, method) {
+    /* Suggested copy for a layout, from the host's own data: a list to choose from, then the values for one choice. Read-only; the person
+       reviews what it fills in before anything is saved. Values go through the same cleaning as typed ones. */
+    const src = /^\/layouts\/([a-z][a-z0-9-]{0,29})\/source(?:\/([A-Za-z0-9_.:-]{1,80}))?$/.exec(path);
+    if (src && method === 'GET') {
+      const lay = layouts?.[src[1]];
+      if (!lay?.source || typeof lay.source.list !== 'function' || typeof lay.source.get !== 'function') throw new HubError('There is nothing to pull copy from for that.', 404);
+      if (!src[2]) {
+        const items = ((await lay.source.list()) || []).slice(0, 100).map((i) => ({ id: String(i.id).slice(0, 80), label: clip(i.label, 160), note: clip(i.note || '', 80) }));
+        return json(200, { label: String(lay.source.label || 'Suggest copy').slice(0, 80), items });
+      }
+      const got = await lay.source.get(src[2]);
+      if (!got) throw new HubError('That one could not be found.', 404);
+      return json(200, { values: cleanValues(lay, got.values, { partial: true }), subject: clip(got.subject || '', 150), previewText: clip(got.previewText || '', 150) });
+    }
     const logo = /^\/look\/logos(?:\/([0-9a-f-]{8,36}))?$/.exec(path);
     if (logo) {
       need('look');
@@ -253,7 +267,7 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
   }
 
   async function handle(request, path, method = request.method) {
-    const isExtra = /^\/(look\/logos|archive)(\/|$)/.test(path);
+    const isExtra = /^\/(look\/logos|archive|layouts\/[a-z][a-z0-9-]*\/source)(\/|$)/.test(path);
     const m = isExtra ? null : ROUTE.exec(path);
     if (!m && !isExtra) return null;
     const [, area, id, sub] = m || [];

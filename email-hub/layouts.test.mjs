@@ -91,6 +91,26 @@ console.log('off unless it can work');
   assert.notEqual((await call(sent, 'POST', '/campaigns', { subject: 'S', layout: 'show', values: { title: 'T' } })).status, 200); ok('a layout that forgets the unsubscribe link cannot be saved');
 }
 
+console.log('suggested copy from the host\'s own data');
+{
+  const rows = { a: { title: 'Cluelesque', story: 'A murder.\r\n\r\nMore.', ticketUrl: 'http://not-https.example', secret: 'never', subject: 'Get your detective on', previewText: 'Two shows only' }, b: null };
+  const withSource = { ...SHOW, source: { label: 'Pull copy from a show', list: async () => [{ id: 'a', label: 'Cluelesque', note: 'next' }, { id: 'b', label: 'Gone' }], get: async (id) => (rows[id] ? { values: rows[id], subject: rows[id].subject, previewText: rows[id].previewText } : null) } };
+  const hub = createEmailHub({ provider: createMemoryProvider(), store: createD1Store({ db: open() }), layouts: { show: withSource } });
+  const list = await call(hub, 'GET', '/layouts');
+  assert.deepEqual(list.body.layouts[0].source, { label: 'Pull copy from a show' }); ok('a layout says it can pull copy, and the screens are never given the functions');
+  const choices = await call(hub, 'GET', '/layouts/show/source');
+  assert.equal(choices.status, 200); assert.deepEqual(choices.body.items.map((i) => [i.id, i.label, i.note]), [['a', 'Cluelesque', 'next'], ['b', 'Gone', '']]); ok('the choices come from the host');
+  const one = await call(hub, 'GET', '/layouts/show/source/a');
+  assert.equal(one.status, 200);
+  assert.equal(one.body.values.title, 'Cluelesque'); assert.equal(one.body.values.story, 'A murder.\n\nMore.'); ok('the suggested values come back tidied');
+  assert.equal(one.body.values.ticketUrl, ''); assert.equal('secret' in one.body.values, false); ok('a link that is not https is dropped, and fields the layout does not declare never get through');
+  assert.equal(one.body.subject, 'Get your detective on'); assert.equal(one.body.previewText, 'Two shows only'); ok('a subject and preview line can be suggested too');
+  assert.equal((await call(hub, 'GET', '/layouts/show/source/b')).status, 404); ok('one that is not there is a 404');
+  const plain = createEmailHub({ provider: createMemoryProvider(), store: createD1Store({ db: open() }), layouts: { show: SHOW } });
+  assert.equal((await call(plain, 'GET', '/layouts/show/source')).status, 404); assert.equal((await call(plain, 'GET', '/layouts')).body.layouts[0].source, null); ok('a layout with no source offers nothing');
+  assert.equal((await call(hub, 'POST', '/layouts/show/source', { x: 1 })).status, 405); ok('it is read-only');
+}
+
 console.log('Kit keeps the design');
 {
   const calls = [];

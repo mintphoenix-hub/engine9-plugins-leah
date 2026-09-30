@@ -400,7 +400,9 @@ export function mountEmailHub(root, options = {}) {
       : `<input id="lf-${esc(f.key)}" type="${f.type === 'url' ? 'url' : 'text'}" autocomplete="off" placeholder="${esc(f.placeholder)}" value="${esc(v[f.key] ?? '')}">`}${f.hint ? `<p class="eh-small eh-muted" style="margin:.3rem 0 0">${esc(f.hint)}</p>` : ''}</div>`;
     let n = 0;
     const lead = edit?.copied ? 'This is a copy, with every field already filled in. Change what is different, then save.' : edit ? 'Change any field. The design stays the same.' : (def.description || 'Fill in the details. The design is always the same.');
+    const sourceBox = def.source ? `<div class="eh-box" id="src-box" style="margin:0 0 1rem"><div class="eh-field"><label for="src-sel">${esc(def.source.label)}</label><select id="src-sel"><option value="">Loading&hellip;</option></select></div><div class="eh-row"><button class="eh-btn eh-s" type="button" data-act="src-fill">Fill empty fields</button><button class="eh-btn eh-o eh-s" type="button" data-act="src-replace">Replace all fields</button></div><p class="eh-small eh-muted" id="src-msg" role="status" aria-live="polite" style="margin:.5rem 0 0">A suggestion to start from. Nothing is saved until you press Save, so read every line first.</p></div>` : '';
     main().innerHTML = head(edit ? (edit.copied ? 'Change the copy' : 'Edit details') : def.label, lead, '<button class="eh-btn eh-o eh-s" type="button" data-act="nav" data-page="campaigns">&larr; All campaigns</button>') + (edit ? '' : kindTabs(layoutId)) + `<div class="eh-comp"><div class="eh-comp-l">
+      ${sourceBox}
       ${edit ? '' : step(++n, 'Who it is for', 'Everyone on your list, or one group.', '<div class="eh-field" style="margin:0"><label for="ly-to">Send to</label><select id="ly-to"><option value="">Everyone on your list</option></select><p class="eh-small" id="ly-to-n" style="margin:.5rem 0 0"></p></div>')}
       ${step(++n, 'Subject and preview', 'The two lines a person reads before they open it.', `<div class="eh-field"><div class="eh-lab"><label for="ly-sub">Subject line</label></div><input id="ly-sub" type="text" maxlength="150" autocomplete="off" value="${esc(c.subject || '')}"></div>
         <div class="eh-field"><div class="eh-lab"><label for="ly-pre">Preview text</label></div><input id="ly-pre" type="text" maxlength="150" autocomplete="off" placeholder="The line after the subject in an inbox" value="${esc(c.preview || '')}"></div>
@@ -410,6 +412,10 @@ export function mountEmailHub(root, options = {}) {
       <aside class="eh-comp-r" aria-label="Preview"><div class="eh-frame-box"><div class="eh-frame-head"><small>FROM ${esc((brandName || 'you').toUpperCase())}</small><b id="ly-fsub"></b></div><iframe id="ly-frame" class="eh-frame" sandbox="allow-same-origin" title="Preview of the email"></iframe></div></aside></div>`;
     $('#ly-frame').addEventListener('load', () => { fit($('#ly-frame')); picturesNote($('#ly-frame')); });
     layoutPreview(true);
+    if (def.source) {                                   // the choices for "pull copy from ..."
+      api(`/layouts/${layoutId}/source`).then((d) => { const sel = $('#src-sel'); if (sel) sel.innerHTML = '<option value="">Choose one&hellip;</option>' + (d.items || []).map((i) => `<option value="${esc(i.id)}">${esc(i.label)}${i.note ? ' (' + esc(i.note) + ')' : ''}</option>`).join(''); })
+        .catch(() => { const m = $('#src-msg'); if (m) say(m, 'The suggestions could not be loaded just now.', true); });
+    }
     if (edit) return;
     const a = st.audience?.tags ? st.audience : await api('/audience').catch(() => null);
     if (!$('#ly-to') || !a || a.connected === false) return;
@@ -575,6 +581,18 @@ export function mountEmailHub(root, options = {}) {
           : `<p class="eh-small eh-muted" style="margin-top:1rem"><b>${esc(d.name)}</b> has no preview here. Its design lives in ${esc(st.label)}: preview it there, or send a test email.</p>${tplLink(d)}`;
         if (d.html && !d.imageUrl) { const f = $('#tpl-frame'); f.addEventListener('load', () => { fit(f); picturesNote(f); }); f.srcdoc = d.html; f.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
       } catch (err) { box.innerHTML = `<p class="eh-msg eh-bad">${esc(err.message)}</p>`; }
+    })();
+    if (a === 'src-fill' || a === 'src-replace') return (async () => {
+      const sel = $('#src-sel'), msg = $('#src-msg'); if (!sel?.value) return say(msg, 'Choose one first.', true);
+      say(msg, 'Fetching…');
+      try {
+        const d = await api(`/layouts/${st.lay.id}/source/${encodeURIComponent(sel.value)}`);
+        const all = a === 'src-replace'; let n = 0;
+        for (const [k, v] of Object.entries(d.values || {})) { const el = $('#lf-' + k); if (el && v && (all || !el.value.trim())) { el.value = v; n++; } }
+        for (const [id, v] of [['ly-sub', d.subject], ['ly-pre', d.previewText]]) { const el = $('#' + id); if (el && v && (all || !el.value.trim())) { el.value = v; n++; } }
+        layoutPreview(true);
+        say(msg, n ? `Filled ${n} ${n === 1 ? 'field' : 'fields'}. Read every line and change what needs it; nothing is saved until you press Save.` : 'Nothing to fill: those fields already have words. Use "Replace all fields" to overwrite them.');
+      } catch (err) { say(msg, err.message, true); }
     })();
     if (a === 'lay-preview') return (async () => {
       const box = $('#tpl-pv'), l = st.layouts?.layouts.find((x) => x.id === b.dataset.id); if (!box || !l?.sample) return; box.innerHTML = '<p class="eh-small eh-muted">Loading&hellip;</p>';
