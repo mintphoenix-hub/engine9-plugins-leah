@@ -91,4 +91,13 @@ console.log('the font is saved with the look');
   assert.equal((await call(hub, 'PATCH', '/look', { reset: true })).status, 200); assert.equal((await call(hub, 'GET', '/look')).body.style.font, 'serif', 'reset goes back to the brand default');
   ok('the font is stored in the look, refused when it is not one of the two, and reset returns the brand\'s default');
 }
+console.log('the logo names the sender, not a site');
+{
+  const alt = (html) => /<img[^>]*alt="([^"]*)"/.exec(html)[1];
+  const logo = { logoUrl: 'https://example.org/l.png' };
+  assert.equal(alt(emailShell('x', { style: logo, brand: { name: 'Example Studio' } })), 'Example Studio', 'the alt text is the brand\'s name (what a client that blocks images shows)');
+  assert.equal(alt(emailShell('x', { style: logo, brand: { name: 'A "Studio" & <Co>' } })), 'A &quot;Studio&quot; &amp; &lt;Co&gt;', 'and it is escaped');
+  assert.equal(alt(emailShell('x', { style: logo })), '', 'with no brand name there is no alt text, never another site\'s');
+  ok('the logo\'s alt text is the host\'s brand name, escaped, and empty when there is none');
+}
 console.log(`\n${n} passed`);

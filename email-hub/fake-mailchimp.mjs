@@ -11,8 +11,8 @@ export function fakeMailchimp({ now = () => Date.now(), campaigns: seed = [] } =
   const calls = [];
   const fails = [];
   const state = {
-    list: { id: 'LIST1', name: 'Loving Motion', members: 214, from_name: 'Louise Mouatt', from_email: 'hello@lovingmotion.com.au' },
-    tags: [{ id: 11, name: 'Sound healing', member_count: 40 }, { id: 12, name: 'Kinesiology', member_count: 97 }],
+    list: { id: 'LIST1', name: 'Example Studio', members: 214, from_name: 'Ada Example', from_email: 'hello@example.org' },
+    tags: [{ id: 11, name: 'Workshops', member_count: 40 }, { id: 12, name: 'Members', member_count: 97 }],
     segments: [{ id: 21, name: 'New this month', member_count: 9 }],
     campaigns: new Map(),
     members: [],
@@ -137,6 +137,6 @@ export function fakeMailchimp({ now = () => Date.now(), campaigns: seed = [] } =
 export const sentCampaign = (over = {}) => ({
   id: 'sent1', web_id: 1, type: 'regular', status: 'sent', create_time: '2026-08-01T00:00:00Z', send_time: '2026-08-02T01:00:00Z', emails_sent: 180, archive_url: 'https://mailchi.mp/x',
   settings: { subject_line: 'Spring gathering', title: 'Spring gathering', preview_text: 'Save the date' },
-  recipients: { list_id: 'LIST1', list_name: 'Loving Motion', recipient_count: 180, segment_text: '' },
+  recipients: { list_id: 'LIST1', list_name: 'Example Studio', recipient_count: 180, segment_text: '' },
   report_summary: { open_rate: 0.46, click_rate: 0.06, unique_opens: 83, subscriber_clicks: 11 }, html: '<p>hi</p>', ...over
 });
