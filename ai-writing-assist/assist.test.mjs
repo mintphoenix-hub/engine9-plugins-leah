@@ -34,10 +34,15 @@ const good = finishRequest({ out: { response: 'Here is a version:\n\nA gentle li
 ck('a good answer is 200 with the tidied text', good.status === 200 && good.body.suggestion === 'A gentle line that will cure nothing.' && good.outcome === 'ok');
 ck('and flags wording to look at', good.body.flags.includes('cure'));
 ck('empty answers are reported as empty', finishRequest({ out: { response: '   ' } }, plan).outcome === 'empty' && finishRequest({ out: {} }, plan).status === 502);
-ck('allowance errors become a "try tomorrow" answer', ['4006: you have used up your daily free allocation of 10,000 neurons', 'Too many requests', 'rate limit'].every((m) => { const r = finishRequest({ error: new Error(m) }, plan); return r.status === 429 && r.outcome === 'limit' && r.body.error === MESSAGES.usedUp; }));
+ck('allowance errors become a "try tomorrow" answer', ['4006: you have used up your daily free allocation of 10,000 neurons', 'quota exceeded'].every((m) => { const r = finishRequest({ error: new Error(m) }, plan); return r.status === 429 && r.outcome === 'limit' && r.body.error === MESSAGES.usedUp; }));
+ck('a short-lived rate limit says to try in a minute, not tomorrow', ['Too many requests', 'rate limit', '429 Too Many Requests'].every((m) => { const r = finishRequest({ error: new Error(m) }, plan); return r.status === 429 && r.outcome === 'error' && r.body.error === MESSAGES.busy; }));
 ck('other errors are a 502 and keep the reason out of the answer', (() => { const r = finishRequest({ error: new Error('socket hang up at 10.0.0.1') }, plan); return r.status === 502 && r.outcome === 'error' && !JSON.stringify(r.body).includes('10.0.0.1') && r.detail.includes('socket'); })());
 ck('a string error works too', finishRequest({ error: 'boom' }, plan).outcome === 'error');
 ck('a host flag list is respected', finishRequest({ out: { response: 'fizz' } }, { flags: [[/fizz/i, 'fizz']] }).body.flags.join() === 'fizz');
+
+ck('a host flag list can be given to planRequest and comes back on the plan', ok({ text: 'hi' }, { flags: [[/x/, 'x']] }).flags[0][1] === 'x' && ok({ text: 'hi' }).flags.length > 3);
+ck('an answer cut off by the token limit is marked truncated', finishRequest({ out: { choices: [{ message: { content: 'Half a sen' }, finish_reason: 'length' }] } }, plan).body.truncated === true);
+ck('a finished answer is not marked truncated', finishRequest({ out: { choices: [{ message: { content: 'Done.' }, finish_reason: 'stop' }] } }, plan).body.truncated === undefined && good.body.truncated === undefined);
 
 console.log('\nusage rows:');
 const day = utcDay(Date.UTC(2026, 8, 30, 23, 59));

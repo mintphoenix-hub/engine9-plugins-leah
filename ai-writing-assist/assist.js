@@ -14,7 +14,7 @@
   and what their field forbids). The plugin owns the limits, the prompt, the checks and the schema.
 */
 import { settings as SETTING_DEFS } from './settings.js';
-import { buildMessages, tidy, readReply, flagWording, DEFAULT_FLAGS } from './prompt.js';
+import { buildMessages, tidy, readReply, readFinish, flagWording, DEFAULT_FLAGS } from './prompt.js';
 import { tableNames, utcDay, toSqlTime } from './helpers.js';
 
 export const LIMITS = { instruction: 600 };
@@ -24,6 +24,7 @@ export const MESSAGES = {
   needBrief: 'Tell me what the piece should be about, or add a few notes.',
   tooLong: 'That is a lot of text at once. Select one section and ask again.',
   notOn: 'Writing help is not switched on yet. Ask whoever set up the site to finish the setup.',
+  busy: 'The writing helper is busy right now. Your writing is safe. Try again in a minute.',
   usedUp: 'The free writing help for today has been used up. It starts again tomorrow morning. Your writing is safe.',
   failed: 'The writing helper did not answer just now. Your writing is safe. Try again in a minute.',
   nothing: 'The writing helper did not come up with anything that time. Try saying it another way.'
@@ -50,7 +51,7 @@ export function resolveSettings(values = {}) {
 const clean = (v, max) => String(v ?? '').replace(/\r\n?/g, '\n').slice(0, max);
 
 /* Step 3. Checks the request and the day's usage, and builds what to send. */
-export function planRequest(input = {}, { settings, guide = '', used = 0, hasAi = true } = {}) {
+export function planRequest(input = {}, { settings, guide = '', used = 0, hasAi = true, flags = DEFAULT_FLAGS } = {}) {
   const s = resolveSettings(settings);
   const mode = input.mode === 'draft' ? 'draft' : 'rewrite';
   const instruction = clean(input.instruction, LIMITS.instruction).trim();
@@ -68,22 +69,26 @@ export function planRequest(input = {}, { settings, guide = '', used = 0, hasAi 
     ok: true, mode, model: s.model, inputChars: text.length,
     messages: buildMessages({ mode, instruction, text, hasSelection: Boolean(input.hasSelection), guide }),
     params: { max_tokens: 1400, temperature: 0.6 },
-    flags: DEFAULT_FLAGS
+    flags
   };
 }
 
-const ALLOWANCE = /allocation|neurons|4006|quota|rate.?limit|too many/i;
+/* The day's allowance is used up (nothing to do until 00:00 UTC) versus a short-lived rate limit (try again shortly). */
+const ALLOWANCE = /allocation|neurons|4006|quota/i;
+const RATE_LIMIT = /rate.?limit|too many|\b429\b|\b3040\b/i;
 
 /* Step 5. Turns what the provider returned (or the error it threw) into an answer. */
 export function finishRequest(result = {}, plan = {}) {
   if (result.error !== undefined && result.error !== null) {
     const msg = String(result.error?.message || result.error);
     if (ALLOWANCE.test(msg)) return { status: 429, body: { error: MESSAGES.usedUp }, outcome: 'limit', outputChars: 0, detail: msg.slice(0, 300) };
+    if (RATE_LIMIT.test(msg)) return { status: 429, body: { error: MESSAGES.busy }, outcome: 'error', outputChars: 0, detail: msg.slice(0, 300) };
     return { status: 502, body: { error: MESSAGES.failed }, outcome: 'error', outputChars: 0, detail: msg.slice(0, 300) };
   }
   const suggestion = tidy(readReply(result.out));
   if (!suggestion) return { status: 502, body: { error: MESSAGES.nothing }, outcome: 'empty', outputChars: 0 };
-  return { status: 200, body: { ok: true, suggestion, flags: flagWording(suggestion, plan.flags || DEFAULT_FLAGS) }, outcome: 'ok', outputChars: suggestion.length };
+  const truncated = readFinish(result.out) === 'length';
+  return { status: 200, body: { ok: true, suggestion, flags: flagWording(suggestion, plan.flags || DEFAULT_FLAGS), ...(truncated ? { truncated: true } : {}) }, outcome: 'ok', outputChars: suggestion.length };
 }
 
 /* ---- usage rows (SQL builders; the host runs them) ---------------------------------------- */
