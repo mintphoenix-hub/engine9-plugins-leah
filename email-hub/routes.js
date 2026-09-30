@@ -31,7 +31,7 @@ export function parseTo(to) {
 
 const ROUTE = /^\/(campaigns|audience|overview|contacts|tags|fields|import|look|config|templates|layouts)(?:\/([A-Za-z0-9_-]+))?(?:\/(content|duplicate|schedule|unschedule|test|checklist|report|tags|unsubscribe|render|layout|preview))?$/;
 
-export function createEmailHub({ provider, brand = {}, store = null, now = () => Date.now(), schedule = {}, people = null, templates = null, defaultTemplate = '', layouts = null, layoutTemplateId = '', templateSample = '' } = {}) {
+export function createEmailHub({ provider, brand = {}, store = null, now = () => Date.now(), schedule = {}, people = null, templates = null, defaultTemplate = '', layouts = null, layoutTemplateId = '', newTemplateId = '', templateSample = '' } = {}) {
   checkLayouts(layouts);
   const rules = scheduleRules(schedule);
   assertProvider(provider);
@@ -99,7 +99,9 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
       if (!text.trim()) throw new HubError('An email needs some words in it.');
       html = bodyHtml(text, { style: await loadStyle(), address: provider.mergeTags.address, unsubscribe: provider.mergeTags.unsubscribe, siteUnsubscribe: unsubscribeLink(brand.unsubscribePage, provider) || '', brand });
       }
-      const tid = await knownTemplate(b.templateId);
+      // The template a new email is sent in: the one chosen, else the host's `newTemplateId` (a template that only holds the message, for a host
+      // whose emails are whole designed emails), else the service's own default.
+      const tid = (await knownTemplate(b.templateId)) || (newTemplateId ? await knownTemplate(newTemplateId) : '');
       const c = await provider.createCampaign({ subject, previewText: clip(b.previewText, 150).trim(), title: clip(b.title, 100).trim(), html, to: parseTo(b.to), ...(tid ? { templateId: tid } : {}) });
       return json(200, { campaign: c, ...(warnings.length ? { warnings } : {}) });
     }
@@ -273,7 +275,7 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
     const [, area, id, sub] = m || [];
     const url = new URL(request.url);
     try {
-      if (area === 'config') return json(200, { label: provider.label, capabilities: caps, brand: { name: brand.name || '' }, appUrl: provider.appUrl('/'), unsubscribePage: brand.unsubscribePage || null, schedule: rules, mergeTags: { unsubscribe: provider.mergeTags.unsubscribe, address: provider.mergeTags.address } });
+      if (area === 'config') return json(200, { newTemplateId: String(newTemplateId || ''), label: provider.label, capabilities: caps, brand: { name: brand.name || '' }, appUrl: provider.appUrl('/'), unsubscribePage: brand.unsubscribePage || null, schedule: rules, mergeTags: { unsubscribe: provider.mergeTags.unsubscribe, address: provider.mergeTags.address } });
       // Logos and the archive do not need the service to be connected (the archive outlives it).
       if (isExtra) return (await extras(request, path, method)) || json(405, { error: 'That is not something we do.' });
       if (!provider.connected()) {

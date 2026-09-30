@@ -114,7 +114,7 @@ export function mountEmailHub(root, options = {}) {
   async function render() {
     main().innerHTML = '<p class="eh-muted">Loading…</p>';
     try {
-      if (!st.appUrl) { const c = await api('/config').catch(() => null); if (c) { st.label = c.label; st.caps = c.capabilities; st.appUrl = c.appUrl || ''; st.mergeTags = c.mergeTags || {}; if (c.schedule) st.sched = { leadMinutes: Number(c.schedule.leadMinutes) || 15, stepMinutes: Number(c.schedule.stepMinutes) || 15 }; renderNav(); } }
+      if (!st.appUrl) { const c = await api('/config').catch(() => null); if (c) { st.newTemplateId = c.newTemplateId || ''; st.label = c.label; st.caps = c.capabilities; st.appUrl = c.appUrl || ''; st.mergeTags = c.mergeTags || {}; if (c.schedule) st.sched = { leadMinutes: Number(c.schedule.leadMinutes) || 15, stepMinutes: Number(c.schedule.stepMinutes) || 15 }; renderNav(); } }
       if (st.page === 'home') await home();
       else if (st.page === 'campaigns') await (st.sub === 'new' ? compose() : st.sub === 'report' ? report() : campaigns());
       else if (st.page === 'audience') await audience();
@@ -348,7 +348,7 @@ export function mountEmailHub(root, options = {}) {
   async function saveDraft(btn) {
     const msg = $('#eh-msg'); btn.disabled = true; say(msg, `Saving to ${st.label}…`);
     try {
-      const tpl = $('#eh-tpl')?.value, dflt = st.tpls?.find((x) => x.isDefault)?.id || '';
+      const tpl = $('#eh-tpl')?.value, dflt = st.newTemplateId || st.tpls?.find((x) => x.isDefault)?.id || '';
       const d = await api('/campaigns', { method: 'POST', body: JSON.stringify({ subject: $('#eh-sub').value, previewText: $('#eh-pre').value, title: $('#eh-title').value, ...(st.bodyMode === 'html' ? { html: $('#eh-html').value } : { text: $('#eh-text').value }), to: $('#eh-to').value, ...(tpl && String(tpl) !== String(dflt) ? { templateId: tpl } : {}) }) });
       st.newTemplate = '';
       try { localStorage.removeItem(draftKey); } catch { /* nothing to clear */ }
@@ -366,7 +366,7 @@ export function mountEmailHub(root, options = {}) {
   }
   /* "Design" chooser for a new email. Only when there is a real choice. */
   const templatePicker = (selected = '') => (st.tpls?.length > 1 || (st.tpls?.length === 1 && !st.tpls[0].isDefault)
-    ? `<div class="eh-field" style="margin:.9rem 0 0"><label for="eh-tpl">Design</label><select id="eh-tpl">${st.tpls.some((t) => t.isDefault) ? '' : `<option value=""${selected ? '' : ' selected'}>Standard (no template)</option>`}${st.tpls.map((t) => `<option value="${esc(t.id)}"${String(t.id) === String(selected || st.tpls.find((x) => x.isDefault)?.id || '') ? ' selected' : ''}>${esc(t.name)}${t.isDefault ? ' (default)' : ''}</option>`).join('')}</select><p class="eh-small eh-muted" style="margin:.4rem 0 0">The ${esc(st.label)} template it is sent in. Most emails use the default. See them all under Content.</p></div>`
+    ? `<div class="eh-field" style="margin:.9rem 0 0"><label for="eh-tpl">Design</label><select id="eh-tpl">${st.tpls.some((t) => t.isDefault) ? '' : `<option value=""${selected || st.newTemplateId ? '' : ' selected'}>Standard (no template)</option>`}${st.tpls.map((t) => `<option value="${esc(t.id)}"${String(t.id) === String(selected || st.newTemplateId || st.tpls.find((x) => x.isDefault)?.id || '') ? ' selected' : ''}>${esc(t.name)}${t.isDefault ? ' (default)' : ''}</option>`).join('')}</select><p class="eh-small eh-muted" style="margin:.4rem 0 0">The ${esc(st.label)} template it is sent in. Most emails use the default. See them all under Content.</p></div>`
     : '');
   /* The template opened in the service itself, where its full design can be previewed. */
   const tplLink = (d) => (d?.url ? `<p style="margin:.7rem 0 0"><a class="eh-btn eh-o eh-s" href="${esc(d.url)}" target="_blank" rel="noopener">Preview the full design in ${esc(st.label)} &#8599;</a></p>` : '');

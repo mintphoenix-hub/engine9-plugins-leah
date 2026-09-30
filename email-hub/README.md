@@ -189,6 +189,7 @@ createEmailHub({ provider, store, layouts: { show: {
 - **Duplicate** copies the email and its values, and the screens open the copy with every field already filled in.
 - Needs a `store` with a database (`createD1Store`), a provider whose `capabilities.layouts` is true (Kit and the memory provider),
   and the table: `migrate-3.15.0.sql` on a host that does not let core install it. Otherwise layouts are simply not offered.
+- `newTemplateId` is the same idea for the emails the hub writes or pastes: a template that only holds the message, used when the person picks none.
 - `layoutTemplateId` is the service-side template such emails are sent in (Kit wraps every broadcast in one). Give it a template
   that does nothing but hold the message, so the layout's own design is not wrapped in a second one.
 - **Duplicate keeps the template**: the Kit adapter now copies the original's `email_template_id`, so a copy is sent in the same
@@ -267,6 +268,7 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 
 ## Version history
 
+- **3.18.1**: `newTemplateId` option: the template a new email is sent in when the person does not choose one. For a host whose emails are whole designed emails (everything the hub writes or pastes is), point it at a template that only holds the message; without it Kit wraps the email in the account's default template and it is designed twice (a card inside a card, two logos). `GET /config` returns it and the Design chooser preselects it.
 - **3.18.0**: A layout may carry a `source` (`{ label, list(), get(id) }`): New show then offers "Pull copy from ..." with a chooser and "Fill empty fields" / "Replace all fields", suggesting values (and a subject and preview line) from the host's own data. Read-only routes `GET /layouts/:id/source` and `/source/:sid`; values are cleaned like typed ones and nothing is saved until Save. No schema change.
 - **3.17.0**: Layouts are listed as templates: Content -> Templates has a "Made from fields" section (New show and the like) with Preview (a layout may carry `sample` values) and "Use for a new email". A preview also fills the merge tags the sample message itself carries, so no raw `{{ }}` shows. No schema change.
 - **3.16.3**: `templateSample` may be an object keyed by template name (or a function of the name), so a template that holds a whole designed email is previewed around a sample of that email, not one plain sentence. The preview is marked `bare` only when what it shows has no background of its own. No schema change.
