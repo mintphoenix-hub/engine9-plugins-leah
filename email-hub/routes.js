@@ -12,6 +12,7 @@ import { pickTemplate, renderTemplate } from './templates.js';
 import { assertProvider, capabilitiesOf, HubError } from './provider.js';
 import { planSchedule, isDraft, scheduleRules } from './schedule.js';
 import { bodyHtml, checkStyle, defaultStyle, StyleError } from './shell.js';
+import { cleanEmailHtml, checkEmailHtml, MAX_HTML } from './pasted.js';
 import { cleanPeople, isEmail, MAX_IMPORT } from './csv.js';
 import { emailsIn } from './stats.js';
 import { unsubscribeLink, handleUnsubscribe } from './unsubscribe.js';
@@ -52,11 +53,19 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
       const b = await readBody(request);
       const subject = clip(b.subject, 150).trim();
       if (!subject) throw new HubError('An email needs a subject line.');
+      let html, warnings = [];
+      if (typeof b.html === 'string' && b.html.trim()) {            // pasted HTML: cleaned and checked, then sent as it is
+        html = cleanEmailHtml(b.html);
+        const found = checkEmailHtml(html, { unsubscribe: provider.mergeTags.unsubscribe, address: provider.mergeTags.address });
+        if (found.errors.length) throw new HubError(found.errors[0]);
+        warnings = found.warnings;
+      } else {
       const text = clip(b.text, 20000);
       if (!text.trim()) throw new HubError('An email needs some words in it.');
-      const html = bodyHtml(text, { style: await loadStyle(), address: provider.mergeTags.address, unsubscribe: provider.mergeTags.unsubscribe, siteUnsubscribe: unsubscribeLink(brand.unsubscribePage, provider) || '', brand });
+      html = bodyHtml(text, { style: await loadStyle(), address: provider.mergeTags.address, unsubscribe: provider.mergeTags.unsubscribe, siteUnsubscribe: unsubscribeLink(brand.unsubscribePage, provider) || '', brand });
+      }
       const c = await provider.createCampaign({ subject, previewText: clip(b.previewText, 150).trim(), title: clip(b.title, 100).trim(), html, to: parseTo(b.to) });
-      return json(200, { campaign: c });
+      return json(200, { campaign: c, ...(warnings.length ? { warnings } : {}) });
     }
     if (id && !action) {
       if (method === 'GET') return json(200, { campaign: await provider.getCampaign(id) });
@@ -196,7 +205,7 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
     const [, area, id, sub] = m || [];
     const url = new URL(request.url);
     try {
-      if (area === 'config') return json(200, { label: provider.label, capabilities: caps, brand: { name: brand.name || '' }, appUrl: provider.appUrl('/'), unsubscribePage: brand.unsubscribePage || null, schedule: rules });
+      if (area === 'config') return json(200, { label: provider.label, capabilities: caps, brand: { name: brand.name || '' }, appUrl: provider.appUrl('/'), unsubscribePage: brand.unsubscribePage || null, schedule: rules, mergeTags: { unsubscribe: provider.mergeTags.unsubscribe, address: provider.mergeTags.address } });
       // Logos and the archive do not need the service to be connected (the archive outlives it).
       if (isExtra) return (await extras(request, path, method)) || json(405, { error: 'That is not something we do.' });
       if (!provider.connected()) {

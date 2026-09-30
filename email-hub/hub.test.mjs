@@ -173,4 +173,44 @@ await t('a postal address in the look replaces the merge tag in the footer, and 
   assert.equal(emailShell('x', { address: 'MERGE', style: { address: '<b>x</b>' } }).includes('<b>x</b>'), false);
   assert.equal((await call('PATCH', '/look', { address: '' })).body.style.address, ''); assert.ok(fake.state.campaigns.get((await newDraft(call)).body.campaign.id).html.includes('*|LIST:ADDRESSLINE|*'));
 });
+
+console.log('pasted HTML');
+import { cleanEmailHtml, checkEmailHtml } from './pasted.js';
+{
+  const page = (extra = '') => `<html><body style="margin:0"><table width="100%"><tr><td><h1>Spring evening</h1><p>Join us.</p><img src="https://example.org/a.jpg" alt="">${extra}<p><a href="*|UNSUB|*">Unsubscribe</a></p></td></tr></table></body></html>`;
+  await t('pasted HTML is saved as it is, without the hub\'s own shell', async ({ fake, call }) => {
+    const r = await call('POST', '/campaigns', { subject: 'Pasted', html: page() });
+    assert.equal(r.status, 200);
+    const sent = fake.calls.find((c) => c.method === 'PUT' && /\/content$/.test(c.path)).body.html;
+    assert.equal(sent, page());                            // untouched: nothing wrapped around it
+    assert.ok(!sent.includes('Loving') && !r.body.warnings?.some((w) => /unsubscribe/i.test(w)));
+  });
+  await t('scripts, frames, forms, handlers and javascript: links are removed', async ({ fake, call }) => {
+    const dirty = page('<script>alert(1)</script><iframe src="https://evil.test"></iframe><form action="/x"><input name="a"></form><a href="javascript:alert(2)" onclick="steal()">x</a><img src="x" onerror="steal()"><div style="behavior:url(x.htc)">y</div><svg onload="z()"></svg>');
+    await call('POST', '/campaigns', { subject: 'Dirty', html: dirty });
+    const sent = fake.calls.find((c) => c.method === 'PUT' && /\/content$/.test(c.path)).body.html;
+    for (const bad of ['<script', 'alert(1)', '<iframe', '<form', 'onclick', 'onerror', 'javascript:', 'behavior', '<svg']) assert.ok(!sent.toLowerCase().includes(bad), bad);
+    assert.ok(sent.includes('Spring evening') && sent.includes('*|UNSUB|*'));
+  });
+  await t('an email with no unsubscribe tag is refused, and nothing is created', async ({ fake, call }) => {
+    const r = await call('POST', '/campaigns', { subject: 'No opt-out', html: '<html><body><p>Hi</p></body></html>' });
+    assert.equal(r.status, 400); assert.match(r.body.error, /unsubscribe/i);
+    assert.ok(!fake.calls.some((c) => c.method === 'POST' && c.path === '/campaigns'));
+  });
+  await t('empty HTML is refused; plain text still works beside it', async ({ call }) => {
+    const r = await call('POST', '/campaigns', { subject: 'Empty', html: '<html><body>*|UNSUB|*</body></html>' });
+    assert.equal(r.status, 400);
+    assert.equal((await newDraft(call)).status, 200);
+  });
+  await t('warnings come back with the draft', async ({ call }) => {
+    const r = await call('POST', '/campaigns', { subject: 'Pics', html: '<html><body><p>Hello friends</p><img src="/local.jpg" alt=""><a href="*|UNSUB|*">Unsubscribe</a></body></html>' });
+    assert.equal(r.status, 200); assert.ok(r.body.warnings.some((w) => /https/.test(w)));
+  });
+  await t('the settings tell the page which unsubscribe tag to ask for', async ({ call }) => {
+    assert.equal((await call('GET', '/config')).body.mergeTags.unsubscribe, '*|UNSUB|*');
+  });
+  assert.equal(cleanEmailHtml('<p>ok</p><!-- x --><!--[if mso]><table></table><![endif]-->'), '<p>ok</p><!--[if mso]><table></table><![endif]-->');
+  assert.equal(checkEmailHtml('<p>Hi</p>', { unsubscribe: '{{ unsubscribe_url }}' }).errors.length, 1);
+}
+
 console.log(`${n} passed`);

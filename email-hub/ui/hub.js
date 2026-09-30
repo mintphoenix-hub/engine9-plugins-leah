@@ -32,6 +32,7 @@
   It imports the same shell.js the server uses, so the "opened" preview is what is saved.
 */
 import { bodyHtml } from '../shell.js';
+import { cleanEmailHtml as cleanHtml } from '../pasted.js';
 import { parseCsv } from '../csv.js';
 import { wallToUtc } from '../time.js';
 import { applyTheme } from './theme.js';
@@ -113,7 +114,7 @@ export function mountEmailHub(root, options = {}) {
   async function render() {
     main().innerHTML = '<p class="eh-muted">Loading…</p>';
     try {
-      if (!st.appUrl) { const c = await api('/config').catch(() => null); if (c) { st.label = c.label; st.caps = c.capabilities; st.appUrl = c.appUrl || ''; if (c.schedule) st.sched = { leadMinutes: Number(c.schedule.leadMinutes) || 15, stepMinutes: Number(c.schedule.stepMinutes) || 15 }; renderNav(); } }
+      if (!st.appUrl) { const c = await api('/config').catch(() => null); if (c) { st.label = c.label; st.caps = c.capabilities; st.appUrl = c.appUrl || ''; st.mergeTags = c.mergeTags || {}; if (c.schedule) st.sched = { leadMinutes: Number(c.schedule.leadMinutes) || 15, stepMinutes: Number(c.schedule.stepMinutes) || 15 }; renderNav(); } }
       if (st.page === 'home') await home();
       else if (st.page === 'campaigns') await (st.sub === 'new' ? compose() : st.sub === 'report' ? report() : campaigns());
       else if (st.page === 'audience') await audience();
@@ -220,9 +221,20 @@ export function mountEmailHub(root, options = {}) {
       <label class="eh-check" style="margin-bottom:.8rem"><input type="checkbox" id="eh-ok"><span>I have read the preview and it is right. Send it to this list at that time.</span></label>
       <div class="eh-row"><button class="eh-btn" type="button" data-act="sched" data-id="${esc(c.id)}" id="eh-sched" disabled>Schedule it</button><button class="eh-btn eh-o eh-s" type="button" data-act="mode-x">Cancel</button></div></div>`;
   }
+  /* The preview frame lives inside the host's page, so it obeys the host's security rules (Content-Security-Policy). A host that
+     allows only its own images shows none of an email's pictures, which sit on the mailing service's servers. When pictures in
+     the frame fail, say why and how to fix it, once. (The frame is same-origin, so its images can be read.) */
+  function picturesNote(f) {
+    try {
+      const box = f.closest('.eh-frame-box'); if (!box || box.querySelector('.eh-pics')) return;
+      const broken = [...f.contentDocument.images].filter((i) => /^https?:/i.test(i.getAttribute('src') || '') && i.complete && i.naturalWidth === 0);
+      if (!broken.length) return;
+      box.insertAdjacentHTML('beforeend', `<p class="eh-pics eh-small eh-muted" style="padding:.6rem .8rem;margin:0">${broken.length === 1 ? 'A picture' : broken.length + ' pictures'} in this email did not load in the preview. If this page limits which pictures it may show, allow secure image addresses for this page (<code>img-src 'self' data: https:</code>). The email itself is not affected, and a test email shows it as people will see it.</p>`);
+    } catch { /* a frame we cannot read has nothing to report */ }
+  }
   async function loadPreview(id) {
     const f = root.querySelector(`[data-frame="${id}"]`); if (!f) return;
-    f.addEventListener('load', () => fit(f));
+    f.addEventListener('load', () => { fit(f); picturesNote(f); });
     const own = findEmail(id);
     try { const d = await api(own?.archive ? `/archive/${own.source}/${own.sourceId}/content` : `/campaigns/${id}/content`); f.srcdoc = d.designed || d.html || '<p style="font-family:sans-serif;padding:1rem">No content yet.</p>'; const bare = !own?.archive && !d.designed && d.html && !/background|bgcolor/i.test(d.html); const box = f.closest('.eh-frame-box'); if (box && !box.querySelector('.eh-bare')) box.insertAdjacentHTML('beforeend', bare ? `<p class="eh-bare eh-small eh-muted" style="padding:.6rem .8rem;margin:0">This is the message text only. The full designed email can be previewed on ${esc(st.label)} or via test email.</p>` : ''); }
     catch (err) { f.srcdoc = `<p style="font-family:sans-serif;padding:1rem">${esc(err.message)}</p>`; }
@@ -275,20 +287,22 @@ export function mountEmailHub(root, options = {}) {
   const step = (n, title, hint, inner) => `<section class="eh-step"><div class="eh-step-h"><span class="eh-stepn" aria-hidden="true">${n}</span><div><h3>${title}</h3>${hint ? `<p>${hint}</p>` : ''}</div></div>${inner}</section>`;
   async function compose() {
     let kept = null; try { kept = JSON.parse(localStorage.getItem(draftKey) || 'null'); } catch { /* no storage */ }
-    const restored = Boolean(kept && (kept.s || kept.x)); st.last = 'eh-sub';
+    const restored = Boolean(kept && (kept.s || kept.x || kept.h)); st.last = 'eh-sub'; st.bodyMode = kept?.mode === 'html' ? 'html' : 'text';
     main().innerHTML = head('Create email', `Write it here, see it as an inbox will, and save it as a draft in ${st.label}. Nothing goes out until you schedule it.`, '<button class="eh-btn eh-o eh-s" type="button" data-act="nav" data-page="campaigns">&larr; All campaigns</button>') + `<div class="eh-comp"><div class="eh-comp-l">
       ${restored ? '<p class="eh-flash" role="status" style="margin:0">Picked up where you left off. <button type="button" class="eh-link" data-act="fresh">Start a new one</button></p>' : ''}
       ${step(1, 'Who it is for', 'Everyone on your list, or one group.', '<div class="eh-field" style="margin:0"><label for="eh-to">Send to</label><select id="eh-to"><option value="">Everyone on your list</option></select><p class="eh-small" id="eh-to-n" style="margin:.5rem 0 0"></p></div>')}
       ${step(2, 'Subject and preview', 'The two lines a person reads before they open it.', `<div class="eh-field"><div class="eh-lab"><label for="eh-sub">Subject line</label><span class="eh-count" id="eh-sub-n"></span></div><input id="eh-sub" type="text" maxlength="150" autocomplete="off" style="font-size:calc(1.05rem*var(--eh-scale,1))"></div>
         <div class="eh-field"><div class="eh-lab"><label for="eh-pre">Preview text</label><span class="eh-count" id="eh-pre-n"></span></div><input id="eh-pre" type="text" maxlength="150" autocomplete="off" placeholder="The line after the subject in an inbox"></div>
         <div class="eh-emoji-box"><button type="button" class="eh-link eh-emoji-toggle" data-act="emoji-toggle" aria-expanded="${emojiOpen}" aria-controls="eh-emoji-tray"><span aria-hidden="true">&#128578;</span> Add an emoji <span class="eh-caret" aria-hidden="true">&#9662;</span></button><div id="eh-emoji-tray" class="${emojiOpen ? '' : 'eh-hide'}"><p class="eh-small eh-muted" style="margin:.6rem 0 0">Goes wherever you were last typing.</p><div class="eh-emoji" role="group" aria-label="Emoji">${emoji.map((x) => `<button type="button" data-act="emoji" aria-label="Add ${x}">${x}</button>`).join('')}</div><p class="eh-small eh-muted" style="margin:.5rem 0 0">For any other emoji: on a Mac press Control + Command + Space; on Windows press the Windows key + period.</p></div>`)}
-      ${step(3, 'The email', 'Write it plainly. A blank line starts a new paragraph, and links work as they are.', `<div class="eh-field"><div class="eh-lab"><label for="eh-text">Message</label><span class="eh-count" id="eh-words"></span></div><textarea id="eh-text" rows="14" maxlength="20000" placeholder="Write it plainly.&#10;&#10;A blank line starts a new paragraph. Links like https://example.org work as they are.&#10;&#10;Your logo, footer and unsubscribe line are added for you."></textarea><p class="eh-small eh-muted" style="margin:.4rem 0 0">Want it designed, with pictures and buttons? Save the draft, then use &ldquo;Edit the design in ${esc(st.label)}&rdquo; on it. The logo, colours and footer are set under Content.</p></div>
+      ${step(3, 'The email', 'Write it plainly, or paste a finished email as HTML.', `<div class="eh-tabs" role="tablist" aria-label="How to make the email" style="margin:0 0 .8rem"><button type="button" class="eh-btn eh-o eh-s" role="tab" data-act="body-mode" data-mode="text" aria-selected="${st.bodyMode !== 'html'}">Write it</button><button type="button" class="eh-btn eh-o eh-s" role="tab" data-act="body-mode" data-mode="html" aria-selected="${st.bodyMode === 'html'}">Paste HTML</button></div>
+        <div id="eh-html-box" class="${st.bodyMode === 'html' ? '' : 'eh-hide'}"><div class="eh-field"><div class="eh-lab"><label for="eh-html">HTML of the whole email</label><span class="eh-count" id="eh-html-n"></span></div><textarea id="eh-html" rows="14" maxlength="200000" spellcheck="false" placeholder="&lt;html&gt; &hellip; &lt;/html&gt;" style="font-family:ui-monospace,Menlo,monospace;font-size:.85rem"></textarea><p class="eh-small eh-muted" style="margin:.4rem 0 0">It is sent exactly as pasted, so your logo, footer and postal address are <strong>not</strong> added. It must contain the unsubscribe tag <code>${esc(st.mergeTags?.unsubscribe || '')}</code> (as a link&rsquo;s address) or it will not save. Scripts, forms and frames are removed. Pictures need full https:// addresses.</p></div></div>
+        <div id="eh-text-box" class="${st.bodyMode === 'html' ? 'eh-hide' : ''}"><div class="eh-field"><div class="eh-lab"><label for="eh-text">Message</label><span class="eh-count" id="eh-words"></span></div><textarea id="eh-text" rows="14" maxlength="20000" placeholder="Write it plainly.&#10;&#10;A blank line starts a new paragraph. Links like https://example.org work as they are.&#10;&#10;Your logo, footer and unsubscribe line are added for you."></textarea><p class="eh-small eh-muted" style="margin:.4rem 0 0">Want it designed, with pictures and buttons? Save the draft, then use &ldquo;Edit the design in ${esc(st.label)}&rdquo; on it. The logo, colours and footer are set under Content.</p></div></div>
         <div class="eh-field" style="margin:0;padding-top:1rem;border-top:1px solid var(--eh-rule)"><label for="eh-title">Name in ${esc(st.label)} <span class="eh-muted" style="text-transform:none;letter-spacing:0">(optional)</span></label><input id="eh-title" type="text" maxlength="100" autocomplete="off" placeholder="Defaults to the subject line"></div>`)}
       <div class="eh-row"><button class="eh-btn" type="button" data-act="save-draft">Save draft to ${esc(st.label)}</button><button class="eh-btn eh-o" type="button" data-act="nav" data-page="campaigns">Cancel</button><span class="eh-small eh-muted">Nothing is sent. You schedule it from Campaigns, after a look.</span></div><p class="eh-msg" id="eh-msg" role="status" aria-live="polite"></p></div>
       <aside class="eh-comp-r" aria-label="Preview"><div class="eh-tabs" role="tablist" aria-label="Preview as"><button type="button" class="eh-btn eh-o eh-s" role="tab" data-act="pv" data-pv="inbox" aria-selected="${st.pv === 'inbox'}">In the inbox</button><button type="button" class="eh-btn eh-o eh-s" role="tab" data-act="pv" data-pv="open" aria-selected="${st.pv === 'open'}">Opened</button></div>
         <div id="eh-pv-inbox" class="${st.pv === 'inbox' ? '' : 'eh-hide'}"><div class="eh-inbox"><div class="eh-inbox-top"><b><i aria-hidden="true"></i>${esc(brandName || 'Your name')}</b><span>now</span></div><p class="eh-inbox-sub" id="eh-pv-sub"></p><p class="eh-inbox-pre" id="eh-pv-pre"></p><p class="eh-inbox-note eh-hide" id="eh-pv-note">Dimmed text may be cut off on a phone.</p></div></div>
         <div id="eh-pv-open" class="eh-frame-box ${st.pv === 'open' ? '' : 'eh-hide'}"><div class="eh-frame-head"><small>FROM ${esc((brandName || 'you').toUpperCase())}</small><b id="eh-pv-fsub"></b></div><iframe id="eh-pv-frame" class="eh-frame" sandbox="allow-same-origin" title="Preview of the email"></iframe></div></aside></div>`;
-    if (kept) { $('#eh-sub').value = kept.s || ''; $('#eh-pre').value = kept.p || ''; $('#eh-title').value = kept.t || ''; $('#eh-text').value = kept.x || ''; }
+    if (kept) { $('#eh-sub').value = kept.s || ''; $('#eh-pre').value = kept.p || ''; $('#eh-title').value = kept.t || ''; $('#eh-text').value = kept.x || ''; $('#eh-html').value = kept.h || ''; }
     $('#eh-pv-frame').addEventListener('load', () => fit($('#eh-pv-frame')));
     preview(); $('#eh-sub').focus();
     const [a, l] = await Promise.all([st.audience?.tags ? st.audience : api('/audience').catch(() => null), st.look ? st.look : api('/look').catch(() => null)]);
@@ -302,15 +316,16 @@ export function mountEmailHub(root, options = {}) {
   }
   function preview() {
     if (!$('#eh-sub')) return;
-    const s = $('#eh-sub').value, p = $('#eh-pre').value, x = $('#eh-text').value, sc = chars(s), pc = chars(p), words = x.trim() ? x.trim().split(/\s+/).length : 0;
+    const s = $('#eh-sub').value, p = $('#eh-pre').value, x = $('#eh-text').value, hh = $('#eh-html').value, sc = chars(s), pc = chars(p), words = x.trim() ? x.trim().split(/\s+/).length : 0;
+    const asHtml = st.bodyMode === 'html'; $('#eh-html-n').textContent = hh.trim() ? `${hh.length.toLocaleString('en-AU')} characters` : '';
     $('#eh-sub-n').textContent = `${sc.length} ${sc.length === 1 ? 'character' : 'characters'}${sc.length > SUBJECT_SOFT ? ' · some inboxes may cut it off' : ''}`; $('#eh-sub-n').classList.toggle('eh-over', sc.length > SUBJECT_SOFT);
     $('#eh-pre-n').textContent = `${pc.length} ${pc.length === 1 ? 'character' : 'characters'}${pc.length > PREVIEW_SOFT ? ' · some inboxes may cut it off' : ''}`; $('#eh-pre-n').classList.toggle('eh-over', pc.length > PREVIEW_SOFT);
     $('#eh-words').textContent = `${words} ${words === 1 ? 'word' : 'words'}`;
     const h = sc.slice(0, 45).join(''), t = sc.slice(45).join('');
     $('#eh-pv-sub').innerHTML = sc.length ? `${esc(h)}${t ? `<span class="dim">${esc(t)}</span>` : ''}` : '<span class="eh-ph">Subject line</span>';
     $('#eh-pv-pre').innerHTML = p ? esc(p) : '<span class="eh-ph">Preview text</span>'; $('#eh-pv-note').classList.toggle('eh-hide', !t); $('#eh-pv-fsub').textContent = s || 'Subject line';
-    if (st.pv === 'open') $('#eh-pv-frame').srcdoc = bodyHtml(x || 'Your words appear here.', { style: st.look?.style, address: st.look?.mergePreview?.address || 'Your postal address', unsubscribe: '#', brand: { style: st.look?.defaults } });
-    try { localStorage.setItem(draftKey, JSON.stringify({ s, p, t: $('#eh-title').value, x, to: $('#eh-to').value })); } catch { /* fine without it */ }
+    if (st.pv === 'open') $('#eh-pv-frame').srcdoc = asHtml ? (hh.trim() ? cleanHtml(hh) : '<p style="font-family:sans-serif;padding:1rem;color:#666">The email you paste appears here.</p>') : bodyHtml(x || 'Your words appear here.', { style: st.look?.style, address: st.look?.mergePreview?.address || 'Your postal address', unsubscribe: '#', brand: { style: st.look?.defaults } });
+    try { localStorage.setItem(draftKey, JSON.stringify({ s, p, t: $('#eh-title').value, x, h: hh, mode: st.bodyMode, to: $('#eh-to').value })); } catch { /* fine without it */ }
   }
   function insert(ch) {
     const id = st.last || 'eh-sub', el = $('#' + id); if (!el) return;
@@ -322,10 +337,10 @@ export function mountEmailHub(root, options = {}) {
   async function saveDraft(btn) {
     const msg = $('#eh-msg'); btn.disabled = true; say(msg, `Saving to ${st.label}…`);
     try {
-      const d = await api('/campaigns', { method: 'POST', body: JSON.stringify({ subject: $('#eh-sub').value, previewText: $('#eh-pre').value, title: $('#eh-title').value, text: $('#eh-text').value, to: $('#eh-to').value }) });
+      const d = await api('/campaigns', { method: 'POST', body: JSON.stringify({ subject: $('#eh-sub').value, previewText: $('#eh-pre').value, title: $('#eh-title').value, ...(st.bodyMode === 'html' ? { html: $('#eh-html').value } : { text: $('#eh-text').value }), to: $('#eh-to').value }) });
       try { localStorage.removeItem(draftKey); } catch { /* nothing to clear */ }
       st.filter = 'draft'; st.open = d.campaign.id; st.mode = null; st.page = 'campaigns'; st.sub = ''; renderNav();
-      await campaigns(); flash(`Saved as a draft in ${st.label}. Have a look, send yourself a test, then schedule it when you are happy.`);
+      await campaigns(); flash(`Saved as a draft in ${st.label}. Have a look, send yourself a test, then schedule it when you are happy.` + (d.warnings?.length ? ' Worth a look first: ' + d.warnings.join(' ') : ''));
     } catch (err) { say(msg, err.message, true); btn.disabled = false; }
   }
 
@@ -450,6 +465,7 @@ export function mountEmailHub(root, options = {}) {
     if (a === 'emoji-toggle') { const open = b.getAttribute('aria-expanded') !== 'true'; b.setAttribute('aria-expanded', String(open)); $('#eh-emoji-tray').classList.toggle('eh-hide', !open); return; }
     if (a === 'pv') { st.pv = b.dataset.pv; root.querySelectorAll('[data-act="pv"]').forEach((x) => x.setAttribute('aria-selected', String(x === b))); $('#eh-pv-inbox').classList.toggle('eh-hide', st.pv !== 'inbox'); $('#eh-pv-open').classList.toggle('eh-hide', st.pv !== 'open'); return preview(); }
     if (a === 'save-draft') return saveDraft(b);
+    if (a === 'body-mode') { st.bodyMode = b.dataset.mode; root.querySelectorAll('[data-act="body-mode"]').forEach((x) => x.setAttribute('aria-selected', String(x === b))); $('#eh-html-box').classList.toggle('eh-hide', st.bodyMode !== 'html'); $('#eh-text-box').classList.toggle('eh-hide', st.bodyMode === 'html'); return preview(); }
     if (a === 'banner') return st.banner?.run?.();
     if (a === 'home-banner') return st.homeBanner?.run?.();
     if (a === 'asub') { st.sub = b.dataset.sub; return audience(); }
@@ -498,7 +514,7 @@ export function mountEmailHub(root, options = {}) {
   root.addEventListener('focusin', (e) => { if (['eh-sub', 'eh-pre', 'eh-text'].includes(e.target.id)) st.last = e.target.id; });
   root.addEventListener('input', (e) => {
     const id = e.target.id;
-    if (['eh-sub', 'eh-pre', 'eh-title', 'eh-text'].includes(id)) return preview();
+    if (['eh-sub', 'eh-pre', 'eh-title', 'eh-text', 'eh-html'].includes(id)) return preview();
     if (id === 'eh-q') { st.q = e.target.value; return draw(false); }
     if (id === 'eh-when' || id === 'eh-ok') { const at = whenAt($('#eh-when').value), ok = Number.isFinite(at) && at >= Date.now() + st.sched.leadMinutes * 60000; $('#eh-when-note').textContent = Number.isFinite(at) ? (ok ? `It will go out ${when(new Date(at).toISOString())}.` : `Choose a time at least ${st.sched.leadMinutes} minutes from now.`) : ''; $('#eh-sched').disabled = !(ok && $('#eh-ok').checked); return; }
     if (id === 'lk-w') { st.lookDraft.logoWidth = Number(e.target.value); $('#lk-wn').textContent = e.target.value; return lookPreview(); }

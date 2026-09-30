@@ -135,6 +135,34 @@ createEmailHub({ provider, templates: { 'Cluelesque announcement': '<html>…{{ 
   review shows the message text with a note pointing at the service's own preview and the test email.
 - It is a preview from a copy the host keeps in step with the service; the service's preview or a test email has the last word.
 
+## Getting the preview to show an email's pictures
+
+A draft's review shows the email in a sandboxed frame **inside the host's page**, so the frame obeys the host page's
+Content-Security-Policy. An email's pictures (a Mailchimp design's images, a logo on the service's servers) are on other
+addresses, so a page that allows only its own images (`img-src 'self'`) shows the preview with no pictures at all.
+
+- **Fix, in the host:** for the page that mounts the hub, allow secure images: `img-src 'self' data: https:`. Images cannot run code;
+  keep `script-src`, `frame-src` and `connect-src` as strict as you like. Fonts from the service, if the email uses them,
+  need their host in `font-src`.
+- **Kit** is different: its API returns only the message text, not the design, so give the hub a copy of the template
+  (see "Showing the designed email in a draft's review"). A Kit preview also needs the images rule above for the pictures.
+- **Mailchimp** returns the full designed email, so the images rule is all a Mailchimp host needs.
+- The review now says so itself: when pictures in the frame fail to load, a short note names `img-src` as the likely cause.
+
+## Pasting a finished email as HTML
+
+Create email has two ways to make the body: write it plainly (the hub adds the logo, footer and unsubscribe line), or **Paste HTML**
+for a finished email from a designer or an email builder. `POST /campaigns` takes `html` instead of `text`.
+
+- It is sent exactly as pasted: nothing is wrapped around it, so the logo, footer and postal address are the pasted email's own.
+- `pasted.js` cleans it first (scripts, frames, forms, plug-ins, event handlers, `javascript:` links and old script-in-CSS tricks are
+  removed; Outlook's `<!--[if mso]>` blocks are kept) and checks it: it must contain the provider's unsubscribe tag
+  (`mergeTags.unsubscribe`) and some words, or it is refused with a plain sentence. Missing postal address and pictures without a
+  full `https://` address come back as `warnings` on the response, and the page shows them.
+- `GET /config` now includes `mergeTags` so the page can name the tag to add. The preview shows the cleaned HTML in the same sandboxed
+  frame as everything else.
+- The service cleans it again on its side; this is a second lock, not the only one.
+
 ## Options a host may set
 
 Everything below is optional and defaults to the neutral behavior, so a site that sets none of it is unchanged.
@@ -186,6 +214,7 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 
 ## Version history
 
+- **3.14.0**: The review explains missing pictures in the preview (the host's `img-src` rule) and the README says how to fix it. Paste HTML (`pasted.js`): Create email can take a finished email as HTML, cleaned and checked (must have the unsubscribe tag), sent as pasted. `GET /config` adds `mergeTags`; `POST /campaigns` accepts `html` and may return `warnings`. Additive; no schema change.
 - **3.13.0**: Home and Analytics email figures (sends, open rate, click rate) fall back to the archived emails from a previous provider for any period in which the service has sent nothing of its own, with a note saying so; the service's own figures are the only ones used as soon as it has sends in that period. `overview` marks such a period `fromArchive`. No schema change.
 - **3.12.2**: Touch screens: text-link buttons and the logo delete button get a finger-sized tap area (CSS only).
 - **3.12.1**: Archived emails (kept from a previous provider) get a "View report" page: the figures that were kept (sent to, opened, clicked) beside the email, with a note that no link, unsubscribe or bounce breakdown came with them. UI only.
