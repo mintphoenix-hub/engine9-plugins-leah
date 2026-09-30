@@ -19,6 +19,9 @@
   - There is no bulk API for a key, and a Worker may make only so many calls per request, so `importContacts` is off
     (`capabilities.import` is false) and the hub hides it. Add people one at a time, or in small batches from the host.
   - Kit has no send-test or send-checklist API, so neither is offered.
+  - A Kit email template is refused for sending unless its HTML holds `{{ unsubscribe_link }}` (or `_url`) and `{{ address }}`, so a
+    host's "message only" template (`newTemplateId`) still needs a slim footer with both. And `{{ address }}` stays Kit's own
+    default postal address until the account's mailing address is filled in (Settings > Email), so set it before the first send.
 */
 import { HubError } from '../provider.js';
 
@@ -45,7 +48,7 @@ export function explain(e) {
   return new HubError('Kit did not answer just now. Try again in a minute.', 502);
 }
 
-export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, appUrl = APP, statsFor = 12, fields: fieldKeys = {} } = {}) {
+export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, appUrl = APP, statsFor = 12, fields: fieldKeys = {}, formId = '' } = {}) {
   const key = String(apiKey || '').trim();
   const wait = sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
 
@@ -248,6 +251,19 @@ export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, 
         await kit(`/tags/${t.id}/subscribers`, { method: 'POST', body: { email_address: email(s.email_address) } });
       } else await kit(`/tags/${t.id}/subscribers/${id(cid, 'contact')}`, { method: 'DELETE' });
       return { ok: true };
+    }),
+    /* A sign-up that Kit confirms by email first (double opt-in). `POST /subscribers` adds people as active with no check, so a
+       host that takes sign-ups from its own page posts to the public address of a Kit FORM instead (`formId`, a public number;
+       no key needed). The person is on the list only once they click the link Kit emails them. With no `formId` this refuses
+       rather than quietly adding someone who never confirmed. */
+    subscribeWithConfirmation: guard(async ({ email: e, first } = {}) => {
+      const a = email(e);
+      if (!ID.test(String(formId))) throw new HubError('The sign-up form is not set up yet.', 409);
+      const body = new URLSearchParams({ email_address: a });
+      if (first) body.set('fields[first_name]', String(first).trim().slice(0, 80));
+      const res = await (inject || globalThis.fetch)(`${appUrl}/forms/${formId}/subscriptions`, { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+      if (!res.ok) { const er = new Error('kit form refused'); er.code = res.status; throw er; }
+      return { ok: true, confirmation: true };
     }),
     unsubscribeContact: guard(async (cid) => { await kit(`/subscribers/${id(cid, 'contact')}/unsubscribe`, { method: 'POST' }); return { ok: true }; }),
     createTag: guard(async (name) => { const t = await tagByName(name); return { tag: { id: t.id, name: t.name, count: 0 } }; }),

@@ -28,6 +28,21 @@ function fakeKit(routes = {}) {
 const kitOf = (routes) => { const f = fakeKit(routes); return { ...f, provider: createKitProvider({ apiKey: KEY, fetch: f.fetch, sleep: async () => {} }) }; };
 const call = (hub, method, path, body) => hub.handle(new Request('https://x' + path, { method, ...(body ? { body: JSON.stringify(body) } : {}) }), path, method).then(async (r) => ({ status: r.status, body: await r.json() }));
 
+console.log('confirmed sign-ups');
+{
+  const seen = [];
+  const f = async (url, init) => { seen.push({ url: String(url), init }); return { ok: true, status: 200, headers: { get: () => null }, text: async () => '{}' }; };
+  const p = createKitProvider({ apiKey: KEY, fetch: f, sleep: async () => {}, formId: '123456' });
+  const r = await p.subscribeWithConfirmation({ email: 'A@B.co', first: 'Sam' });
+  assert.equal(r.confirmation, true);
+  assert.equal(seen[0].url, 'https://app.kit.com/forms/123456/subscriptions');
+  assert.equal(seen[0].init.body.get('email_address'), 'a@b.co'); assert.equal(seen[0].init.body.get('fields[first_name]'), 'Sam');
+  assert.equal(seen[0].init.headers['X-Kit-Api-Key'], undefined);
+  await assert.rejects(createKitProvider({ apiKey: KEY, fetch: f }).subscribeWithConfirmation({ email: 'a@b.co' }), (e) => e instanceof HubError);
+  await assert.rejects(p.subscribeWithConfirmation({ email: 'nope' }), (e) => e instanceof HubError);
+  assert.equal(seen.length, 1); ok('it signs people up through the form (Kit emails them to confirm, no key sent) and refuses with no form');
+}
+
 console.log('the Kit provider');
 {
   const { provider } = kitOf();
