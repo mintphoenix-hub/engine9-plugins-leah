@@ -1,0 +1,70 @@
+# Follows engine9 core. Core publishes no releases, so a "release" is a new commit on its main branch. Every six
+# hours this looks for one. When core has moved it installs the newest core, runs every test (core.test.mjs installs
+# each plugin with core's own PluginWorker) and then either
+#   - opens a pull request that records the tested commit in core-tested.json and bumps the patch version, or
+#   - opens (or updates) the `core-compat` issue with what broke.
+# It never tags, publishes or touches a site: a person merges the pull request and tags the release, and sites
+# pick that up through their own weekly engine9-updates pull request.
+#
+# Needs Settings > Actions > General > "Allow GitHub Actions to create and approve pull requests".
+# The daily `test` workflow is the safety net; this one is the one that keeps the package current.
+name: core-updates
+
+on:
+  schedule:
+    - cron: '43 */6 * * *'
+  workflow_dispatch:
+  repository_dispatch:
+    types: [engine9-core-release]     # if core ever announces a release, it can start this at once
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: core-updates
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Look for a new core, and test it
+        run: node scripts/core-updates.mjs --report "$RUNNER_TEMP/report.md" --status "$RUNNER_TEMP/status.json"
+      - name: Read what happened
+        id: s
+        run: |
+          echo "changed=$(node -p "require(process.env.RUNNER_TEMP + '/status.json').changed")" >> "$GITHUB_OUTPUT"
+          echo "passed=$(node -p "String(require(process.env.RUNNER_TEMP + '/status.json').passed)")" >> "$GITHUB_OUTPUT"
+          echo "core=$(node -p "require(process.env.RUNNER_TEMP + '/status.json').core.slice(0, 7)")" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require(process.env.RUNNER_TEMP + '/status.json').version || ''")" >> "$GITHUB_OUTPUT"
+      - name: Open a pull request (the newest core passes)
+        if: steps.s.outputs.changed == 'true' && steps.s.outputs.passed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="core-compat/${{ steps.s.outputs.core }}"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then echo "Already open: $branch"; exit 0; fi
+          git config user.name "core updates"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add core-tested.json package.json
+          git commit -m "Tested with engine9 core ${{ steps.s.outputs.core }} (v${{ steps.s.outputs.version }})"
+          git push origin "HEAD:refs/heads/$branch"
+          gh pr create --base main --head "$branch" \
+            --title "Tested with engine9 core ${{ steps.s.outputs.core }} (v${{ steps.s.outputs.version }})" \
+            --body-file "$RUNNER_TEMP/report.md"
+      - name: Report a break (the newest core fails a test)
+        if: steps.s.outputs.changed == 'true' && steps.s.outputs.passed == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create core-compat --color B04A4A --description "A new engine9 core broke a plugin" 2>/dev/null || true
+          existing=$(gh issue list --label core-compat --state open --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then gh issue comment "$existing" --body-file "$RUNNER_TEMP/report.md"
+          else gh issue create --label core-compat --title "Plugins fail against the newest engine9 core" --body-file "$RUNNER_TEMP/report.md"; fi

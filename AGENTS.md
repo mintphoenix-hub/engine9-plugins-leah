@@ -4,7 +4,7 @@ Read this before changing the plugin or wiring it into an application. It is wri
 
 ## What this is
 
-A package of engine9 native plugins. Each directory with an `index.js` is one plugin and its identity is `@mintphoenix/plugins/<directory>`. Today there are two: [`board`](board/README.md), a message board (threaded posts, reactions, `@mentions`, `@group` and `#topic` tags that notify, unread tracking, an ideas list), and [`ai-writing-assist`](ai-writing-assist/README.md), writing help on Cloudflare Workers AI (a person's own words in, a suggestion out; the host owns the AI call, the database and the brief about the writer).
+A package of engine9 native plugins. Each directory with an `index.js` is one plugin and its identity is `@mintphoenix/plugins/<directory>`. Today there are three: [`email-hub`](email-hub/README.md), an admin hub for a site's own emails on top of Mailchimp, Kit or another service (one provider contract, the guarded scheduling rules, the email look, logo uploads, unsubscribing through the site's own page); [`board`](board/README.md), a message board (threaded posts, reactions, `@mentions`, `@group` and `#topic` tags that notify, unread tracking, an ideas list), and [`ai-writing-assist`](ai-writing-assist/README.md), writing help on Cloudflare Workers AI (a person's own words in, a suggestion out; the host owns the AI call, the database and the brief about the writer).
 
 The plugin owns the **schema, settings, console screens, the parsing helpers and the notification machinery** (who is pushed, Web Push encryption and sending). Your application owns everything that touches your users: sign-in, who can be mentioned, what a group means, the VAPID keys (a secret), where subscriptions are read and written, permissions. Keep it that way. If a change would make the plugin know about one product's vocabulary, it belongs in that product.
 
@@ -62,6 +62,10 @@ node board/helpers.test.mjs
 `node core.test.mjs` (or `npm test`, which runs everything) installs each plugin into a scratch in-memory database with core's own `PluginWorker` and passes the schema through core's SQLite and MySQL dialects. It needs the dev dependencies (`npm install`), which take the **newest** `@engine9/core` on purpose and have no lockfile. GitHub Actions (`.github/workflows/test.yml`) runs it on every push and once a day, and opens a `core-compat` issue if a new core release breaks a plugin. That is how this package finds out about core changes before a site does.
 
 Do not start HTTP servers or apply anything to a shared database unless the person asked.
+
+## Keeping up with core
+
+Core publishes no releases, only commits on its main branch, so this package follows core by commit. `core-tested.json` records the commit it was last tested against. `.github/workflows/core-updates.yml` looks every six hours (`scripts/core-updates.mjs`); when core has moved it installs the newest core, runs every test, and then either opens a pull request that records the new commit and bumps the patch version, or opens (or updates) the `core-compat` issue with what broke. It never tags, publishes or touches a site: merge the pull request, then tag `v<version>` when the person asks, and sites pick it up through their own weekly `engine9-updates` pull request. The daily `test` workflow stays as the safety net. Needs "Allow GitHub Actions to create and approve pull requests" in the repository's Actions settings.
 
 ## Pitfalls that have already happened
 

@@ -33,7 +33,7 @@ const dirs = readdirSync(here, { withFileTypes: true })
 
 /* Only the plugins with no plugin dependencies can be installed alone in a scratch database. The
    others (the board needs the person interface) are checked for compile + schema only. */
-const STANDALONE = new Set(['ai-writing-assist']);
+const STANDALONE = new Set(['ai-writing-assist', 'email-hub']);
 
 let core = 'unknown';
 try { core = JSON.parse(readFileSync(new URL('node_modules/@engine9/core/package.json', here), 'utf8')).version; } catch { /* label only */ }
