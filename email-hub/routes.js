@@ -14,6 +14,7 @@ import { bodyHtml, checkStyle, defaultStyle, StyleError } from './shell.js';
 import { cleanPeople, isEmail, MAX_IMPORT } from './csv.js';
 import { emailsIn } from './stats.js';
 import { unsubscribeLink, handleUnsubscribe } from './unsubscribe.js';
+import { quietly } from './people.js';
 
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 const clip = (v, n) => Array.from(String(v ?? '')).slice(0, n).join('');
@@ -27,7 +28,7 @@ export function parseTo(to) {
 
 const ROUTE = /^\/(campaigns|audience|overview|contacts|tags|fields|import|look|config|templates)(?:\/([A-Za-z0-9_-]+))?(?:\/(content|duplicate|schedule|unschedule|test|checklist|report|tags|unsubscribe))?$/;
 
-export function createEmailHub({ provider, brand = {}, store = null, now = () => Date.now(), schedule = {} } = {}) {
+export function createEmailHub({ provider, brand = {}, store = null, now = () => Date.now(), schedule = {}, people = null } = {}) {
   const rules = scheduleRules(schedule);
   assertProvider(provider);
   const caps = capabilitiesOf(provider);
@@ -124,7 +125,11 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
       const b = await readBody(request);
       if (b.consent !== true) throw new HubError('Tick the box to say this person agreed to hear from you.');
       if (!isEmail(String(b.email || '').trim())) throw new HubError('That does not look like an email address.');
-      return json(200, await provider.addContact({ email: String(b.email).trim().toLowerCase(), first: clip(b.first, 80).trim(), last: clip(b.last, 80).trim(), tag: clip(b.tag, 100).trim() }));
+      const person = { email: String(b.email).trim().toLowerCase(), first: clip(b.first, 80).trim(), last: clip(b.last, 80).trim() };
+      const added = await provider.addContact({ ...person, tag: clip(b.tag, 100).trim() });
+      // A note means the service kept somebody who had unsubscribed unsubscribed: core must not be told they consented.
+      if (people && !added?.note) await quietly(() => people.subscribe(person), 'subscribe sync');
+      return json(200, added);
     }
     if (id && !sub && method === 'GET') return json(200, await provider.contact(id));
     if (id && sub === 'tags' && (method === 'POST' || method === 'DELETE')) {
@@ -132,7 +137,13 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
       if (!name) throw new HubError('Choose a tag.');
       return json(200, await provider.tagContact(id, name, method === 'POST'));
     }
-    if (id && sub === 'unsubscribe' && method === 'POST') return json(200, await provider.unsubscribeContact(id));
+    if (id && sub === 'unsubscribe' && method === 'POST') {
+      // Kit and Mailchimp address a contact by id, so the address is read first, to tell core who left.
+      const who = people ? await provider.contact(id).catch(() => null) : null;
+      const out = await provider.unsubscribeContact(id);
+      if (people && who?.email) await quietly(() => people.unsubscribe(who.email), 'unsubscribe sync');
+      return json(200, out);
+    }
     return json(405, { error: 'That is not something we do.' });
   }
 
@@ -207,6 +218,6 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
   }
   /* The host's PUBLIC unsubscribe route (no sign-in: a person following an email link has none) calls this with the
      parsed JSON body and sends the { status, body } it returns. See unsubscribe.js. */
-  const unsubscribe = (input) => handleUnsubscribe(provider, input);
+  const unsubscribe = (input) => handleUnsubscribe(provider, input, { people });
   return { handle, provider, capabilities: caps, loadStyle, unsubscribe };
 }

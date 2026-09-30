@@ -102,6 +102,21 @@ mountEmailHub(root, { theme: {
 
 Nothing is read, observed or listened to until the screens are mounted with `theme`, and `destroy()` removes everything it attached; with no `theme` option the screens look exactly as before (the plain look, or whatever `--eh-*` variables the host set). The color and contrast helpers in `ui/theme.js` are pure and tested without a browser (`theme.test.mjs`). The *emails* are a separate thing: they are built on the server and cannot read a page, so their look is the brand's defaults plus what the person sets in Content.
 
+## Connection to engine9 core
+
+Core keeps its own record of every person and of whether each address may be emailed (`person` and `person_email`, the standard tables of `@engine9/interfaces/person` and `person_email`; `person_email.subscription_status` is Subscribed, Unsubscribed, Not Subscribed, Bouncing or Spam). The plugin declares the person interface it relies on (`metadata.dependencies`) and, when the host passes `people`, keeps core in step with the email service:
+
+```js
+import { createCorePeople, createEmailHub } from '@mintphoenix/plugins/email-hub';
+const hub = createEmailHub({ provider, brand, store, people: createCorePeople({ db: env.DB }) });
+```
+
+- **Someone leaves** (the host's public unsubscribe page, or the Unsubscribe button on a contact): every matching `person_email` row becomes Unsubscribed, the way core's own inbound upsert does it. It only updates rows core already has; it never creates one, because the public page accepts any address and must not be a way to write junk into the people table.
+- **Someone is added** on the Audience screen, with the consent tick: core gets the person and the address (`Subscribed`) if it has neither, a `Not Subscribed` address moves to Subscribed, and a missing name is filled in, never overwritten. Unsubscribed, Bouncing and Spam are **never** changed, so nobody who left is quietly put back; and when the service kept someone unsubscribed (its note says so), core is not told they consented.
+- Both run **after** the service accepted the change. A failure in core never undoes or hides it: it is logged, without the address, and the hub carries on. What the service accepted is what happened.
+- An address is matched the way core matches it: trimmed and lower-cased, by its text and by `email_hash_v1` (the sha256 of that). A name goes on `person`, never on the address. Everyone is a `person`.
+- Not covered: the service's own bounce and complaint states are not copied to core, and the audience itself is not imported into core's people (it lives in the service). With no `people` the hub is unchanged.
+
 ## Options a host may set
 
 Everything below is optional and defaults to the neutral behavior, so a site that sets none of it is unchanged.
@@ -153,6 +168,7 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 
 ## Version history
 
+- **3.11.0**: Connection to engine9 core's people (`people.js`, `createCorePeople`, `createEmailHub({ people })`): an unsubscribe on the host's page or on a contact, and a contact added with the consent tick, are also recorded in `person` / `person_email` after the service accepts them, by core's own rules (every matching address, never creating a row for an unsubscribe, never putting back Unsubscribed, Bouncing or Spam). The plugin now declares `@engine9/interfaces/person` in `metadata.dependencies`, so core installs it alongside; `core.test.mjs` therefore checks it by compile and schema, as it does the board. Additive and off by default.
 - **3.10.0**: `theme: true` makes the screens adapt to the site they are in and follow it when it changes (`ui/theme.js`: reads computed styles and common custom properties, derives every `--eh-*` variable with contrast checks, watches for class, style and light/dark changes). No side effects until it is asked for, and off by default, so an existing host is unchanged.
 - **3.9.0**: Options for hosts, all additive and defaulting to today's behavior: a body font (`brand.style.font`, stored as `style.font`; migrate an existing install with `migrate-3.9.0.sql`), loosenable scheduling rules (`createEmailHub({ schedule })`, told to the screens by `/config`), the service's templates listed by name (`GET /templates`, `capabilities.templates`), and the Kit adapter's `fields` option for a contact's original signup date and source.
 - **3.7.1**: The Audience choices (All contacts, Tags, Segments, Fields, Import contacts) are a submenu under Audience in the left nav. One corner size (`--eh-radius`, 10px) for buttons, nav, tabs, tiles, cards, fields and tags. `core-updates` ignores any lockfile and records the core commit npm really installed; interfaces are taken from their repository like core. No table, setting or export changed.

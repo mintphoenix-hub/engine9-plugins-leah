@@ -29,9 +29,12 @@
       the literal tag text; `emailFromLink` refuses it and the page asks for the address instead. Check the first real send.
     - The route must be reachable without a sign-in, and the page must sit outside any age gate or "coming soon" card, or
       leaving becomes harder than joining.
+    - When the host passes `people` (people.js), the change is also made in engine9 core, after the service accepted it.
     - The provider must offer `unsubscribeByEmail` (Kit and Mailchimp do). Without it the route answers 501 and the hub
       keeps using the service's own link alone.
 */
+
+import { quietly } from './people.js';
 
 const EMAIL = /^[^\s@<>(),;:"{}|*]+@[^\s@<>(),;:"{}|*]+\.[^\s@<>(),;:"{}|*]+$/;
 
@@ -60,7 +63,7 @@ export function emailFromLink(query) {
 /* The body of the host's public route. Returns { status, body }; the host sends it. `provider` is a provider. A
    honeypot hit answers ok without doing anything. A failure answers a plain message, never the service's own error
    text, which can quote the request back. */
-export async function handleUnsubscribe(provider, input) {
+export async function handleUnsubscribe(provider, input, { people = null } = {}) {
   if (typeof provider?.unsubscribeByEmail !== 'function') return { status: 501, body: { error: 'That is not switched on here.' } };
   const body = input && typeof input === 'object' ? input : {};
   if (String(body.company || '').trim()) return { status: 200, body: { ok: true } };
@@ -72,5 +75,7 @@ export async function handleUnsubscribe(provider, input) {
   } catch (_) {
     return { status: 502, body: { error: 'That did not go through. Try again in a moment.' } };
   }
+  // The service has accepted it: tell engine9 core too (see people.js). A failure there never undoes or hides it.
+  if (people && typeof people.unsubscribe === 'function') await quietly(() => people.unsubscribe(email), 'unsubscribe sync');
   return { status: 200, body: { ok: true } };
 }

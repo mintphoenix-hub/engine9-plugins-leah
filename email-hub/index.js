@@ -12,16 +12,19 @@ import * as logos from './logos.js';
 import * as unsubscribe from './unsubscribe.js';
 import * as routes from './routes.js';
 import * as store from './store.js';
+import * as people from './people.js';
 import * as adapters from './adapters/index.js';
 
 const metadata = {
   name: 'Email hub',
   unique: true,
-  dependencies: {},
+  dependencies: {
+    '@engine9/interfaces/person': '>=1.7.0'
+  },
   schemas: ['schema.js']
 };
 
-export { metadata, schema, settings, helpers, provider, contract, shell, schedule, csv, stats, time, logos, unsubscribe, routes, store, adapters };
+export { metadata, schema, settings, helpers, provider, contract, shell, schedule, csv, stats, time, logos, unsubscribe, routes, store, people, adapters };
 export * from './helpers.js';
 export * from './provider.js';
 export * from './contract.js';
@@ -34,6 +37,7 @@ export * from './logos.js';
 export * from './unsubscribe.js';
 export * from './routes.js';
 export * from './store.js';
+export * from './people.js';
 export * from './adapters/index.js';
 export default {
   metadata,
@@ -51,5 +55,6 @@ export default {
   unsubscribe,
   routes,
   store,
+  people,
   adapters
 };
