@@ -18,7 +18,7 @@
   },
   "devDependencies": {
     "@engine9/core": "git+https://github.com/engine9-ai/core.git",
-    "@engine9/interfaces": "^1.8.0",
+    "@engine9/interfaces": "git+https://github.com/engine9-ai/interfaces.git",
     "mysql2": "^3.0.0",
     "knex": "^3.3.0",
     "better-sqlite3": "^13.0.3"

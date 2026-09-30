@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { firstSha, bumpPatch, decide } from './core-updates.mjs';
+import { firstSha, bumpPatch, decide, resolvedSha } from './core-updates.mjs';
 
 let n = 0; const ok = (name, fn) => { fn(); n++; console.log('  ok  ' + name); };
 const A = 'a'.repeat(40), B = 'b'.repeat(40);
@@ -11,5 +11,9 @@ ok('does nothing while core has not moved, and tests when it has', () => {
   assert.equal(decide({ recorded: A, newest: B }).action, 'test');
   assert.equal(decide({ recorded: null, newest: B }).action, 'test');
   assert.equal(decide({ recorded: A, newest: null }).action, 'unknown');
+});
+ok('reads the commit npm actually installed from the lockfile', () => {
+  const lock = { packages: { 'node_modules/@engine9/core': { resolved: `git+ssh://git@github.com/engine9-ai/core.git#${A}` }, 'node_modules/x': { resolved: 'https://registry/x.tgz' } } };
+  assert.equal(resolvedSha(lock, '@engine9/core'), A); assert.equal(resolvedSha(lock, 'x'), null); assert.equal(resolvedSha(null, '@engine9/core'), null);
 });
 console.log(`${n} passed`);

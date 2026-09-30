@@ -15,7 +15,7 @@
   (AGENTS.md, "Changing the plugin"). --dry only says whether core has moved.
 */
 import { spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 
 const CORE_REPO = 'https://github.com/engine9-ai/core.git';
 
@@ -27,6 +27,13 @@ export function bumpPatch(v) {
   const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(v));
   if (!m) throw new Error(`not a plain version: ${v}`);
   return `${m[1]}.${m[2]}.${Number(m[3]) + 1}`;
+}
+
+/* The commit npm really installed for a package, read from the lockfile it just wrote. This is what was tested; the
+   commit `git ls-remote` shows a moment earlier may already be newer. */
+export function resolvedSha(lock, name) {
+  const r = lock?.packages?.[`node_modules/${name}`]?.resolved || '';
+  return (/#([0-9a-f]{40})$/.exec(r) || [])[1] || null;
 }
 
 /* What to do, given the commit last tested and the newest one. */
@@ -52,6 +59,8 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop()
     process.exit(d.action === 'unknown' ? 1 : 0);
   }
 
+  // A lockfile would pin an old core, and testing that would tell us nothing about the newest one.
+  if (existsSync('package-lock.json')) rmSync('package-lock.json');
   const install = run('npm', ['install', '--no-audit', '--no-fund']);
   if (install.status !== 0) {
     status({ changed: true, passed: false, core: newest, previous: tested.core, stage: 'install' });
@@ -59,6 +68,7 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop()
     process.exit(0);
   }
   const version = JSON.parse(readFileSync('node_modules/@engine9/core/package.json', 'utf8')).version;
+  const installed = resolvedSha(existsSync('package-lock.json') ? JSON.parse(readFileSync('package-lock.json', 'utf8')) : null, '@engine9/core') || newest;
   const test = run('npm', ['test']);
   const passed = test.status === 0;
   const tail = (test.stdout + test.stderr).split('\n').filter((l) => /FAIL|fail|Error|passed/.test(l)).slice(-25).join('\n');
@@ -68,13 +78,13 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop()
     const next = bumpPatch(pkg.version);
     pkg.version = next;
     writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-    writeFileSync('core-tested.json', JSON.stringify({ core: newest, coreVersion: version, testedAt: new Date().toISOString().slice(0, 10) }, null, 2) + '\n');
-    status({ changed: true, passed: true, core: newest, coreVersion: version, previous: tested.core, version: next });
-    report(`Every test passes against engine9 core ${version} (${newest.slice(0, 7)}), up from ${tested.core.slice(0, 7)}.\n\n` +
+    writeFileSync('core-tested.json', JSON.stringify({ core: installed, coreVersion: version, testedAt: new Date().toISOString().slice(0, 10) }, null, 2) + '\n');
+    status({ changed: true, passed: true, core: installed, coreVersion: version, previous: tested.core, version: next });
+    report(`Every test passes against engine9 core ${version} (${installed.slice(0, 7)}), up from ${tested.core.slice(0, 7)}.\n\n` +
       `This records the tested commit in \`core-tested.json\` and bumps the package to ${next}. Nothing else changed: no table, setting or export.\n` +
       `After merging, tag the release \`v${next}\` so sites pick it up through their weekly update.\n\n\`\`\`\n${tail}\n\`\`\``);
   } else {
-    status({ changed: true, passed: false, core: newest, coreVersion: version, previous: tested.core, stage: 'test' });
-    report(`The newest engine9 core (${version}, ${newest.slice(0, 7)}) breaks a test.\n\nLast good commit: ${tested.core.slice(0, 7)}.\n\n\`\`\`\n${tail}\n\`\`\`\n\nFix the plugin, or pin core until it is fixed. Sites are not affected until they update.`);
+    status({ changed: true, passed: false, core: installed, coreVersion: version, previous: tested.core, stage: 'test' });
+    report(`The newest engine9 core (${version}, ${installed.slice(0, 7)}) breaks a test.\n\nLast good commit: ${tested.core.slice(0, 7)}.\n\n\`\`\`\n${tail}\n\`\`\`\n\nFix the plugin, or pin core until it is fixed. Sites are not affected until they update.`);
   }
 }
