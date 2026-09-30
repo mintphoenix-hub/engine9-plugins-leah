@@ -13,7 +13,14 @@
 /* Neutral, so a site that sets no brand still gets a readable email. */
 export const DEFAULT_STYLE = {
   ground: '#F1F3F4', card: '#FFFFFF', border: '#D9DEE0', accent: '#B7C4C8', text: '#22292C', muted: '#5B676C', link: '#2F5D7C',
-  logoUrl: '', logoWidth: 220, footerLine: '', address: ''
+  logoUrl: '', logoWidth: 220, footerLine: '', address: '', font: 'sans'
+};
+/* The body face of an email: a web-safe stack, because an email client loads no web fonts. `sans` is the neutral default;
+   a host whose look is a serif sets `font: 'serif'` in its brand style, and the person can change it in the look editor. */
+export const STYLE_FONTS = { sans: 'sans', serif: 'serif' };
+const BODY = {
+  sans: "font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:16px;line-height:1.7",
+  serif: "font-family:Georgia,'Times New Roman',serif;font-size:17px;line-height:1.65"
 };
 export const STYLE_COLORS = ['ground', 'card', 'border', 'accent', 'text', 'muted', 'link'];
 
@@ -47,12 +54,16 @@ export function checkStyle(input, brand = {}) {
   }
   /* The sender's postal address, shown at the foot of every email. Empty means the service's own merge tag (the address
      saved in the service). Plain text only; it is escaped when the email is built. */
+  if (i.font !== undefined) {
+    if (!Object.prototype.hasOwnProperty.call(STYLE_FONTS, i.font)) throw new StyleError('Choose Sans or Serif for the words.');
+    s.font = i.font;
+  }
   if (i.address !== undefined) s.address = String(i.address).replace(/[\u0000-\u0009\u000b-\u001f<>]/g, ' ').replace(/[ \t]+/g, ' ').replace(/\s*\n\s*/g, ', ').trim().slice(0, 200);
   if (i.footerLine !== undefined) s.footerLine = String(i.footerLine).replace(/[\u0000-\u001f<>&"]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || defaultStyle(brand).footerLine;
   return s;
 }
 
-export const emailShell = (inner, { address = '', unsubscribe = '', siteUnsubscribe = '', style = {}, brand = {} } = {}, k = { ...DEFAULT_STYLE, ...(brand.style || {}), ...style }) => `<div style="margin:0;padding:0;background-color:${k.ground}" bgcolor="${k.ground}"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${k.ground}" style="background-color:${k.ground}"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" bgcolor="${k.card}" style="width:100%;max-width:600px;background-color:${k.card};border:1px solid ${k.border}"><tr><td align="center" style="padding:30px 24px 20px;border-bottom:1px solid ${k.accent}"><img src="${k.logoUrl}" alt="Loving Motion Kinesiology" width="${k.logoWidth}" style="display:block;width:${k.logoWidth}px;max-width:100%;height:auto;border:0"></td></tr><tr><td style="padding:34px 34px 10px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:16px;line-height:1.7;color:${k.text}">${inner}</td></tr><tr><td align="center" style="padding:6px 34px 24px"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td width="56" height="1" bgcolor="${k.accent}" style="width:56px;height:1px;line-height:1px;font-size:1px">&nbsp;</td></tr></table></td></tr><tr><td align="center" style="padding:0 34px 30px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:${k.muted}">${k.footerLine}<br>${k.address ? String(k.address).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : address}<br>${siteUnsubscribe ? `<a href="${siteUnsubscribe.replace(/"/g, '%22')}" style="color:${k.link}">Unsubscribe</a><br><span style="font-size:11px;color:${k.muted}">Trouble unsubscribing? <a href="${unsubscribe}" style="color:${k.muted};text-decoration:underline">Use this link</a>.</span>` : `<a href="${unsubscribe}" style="color:${k.link}">Unsubscribe</a>`}</td></tr></table></td></tr></table></div>`;
+export const emailShell = (inner, { address = '', unsubscribe = '', siteUnsubscribe = '', style = {}, brand = {} } = {}, k = { ...DEFAULT_STYLE, ...(brand.style || {}), ...style }) => `<div style="margin:0;padding:0;background-color:${k.ground}" bgcolor="${k.ground}"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${k.ground}" style="background-color:${k.ground}"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" bgcolor="${k.card}" style="width:100%;max-width:600px;background-color:${k.card};border:1px solid ${k.border}"><tr><td align="center" style="padding:30px 24px 20px;border-bottom:1px solid ${k.accent}"><img src="${k.logoUrl}" alt="Loving Motion Kinesiology" width="${k.logoWidth}" style="display:block;width:${k.logoWidth}px;max-width:100%;height:auto;border:0"></td></tr><tr><td style="padding:34px 34px 10px;${BODY[k.font] || BODY.sans};color:${k.text}">${inner}</td></tr><tr><td align="center" style="padding:6px 34px 24px"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td width="56" height="1" bgcolor="${k.accent}" style="width:56px;height:1px;line-height:1px;font-size:1px">&nbsp;</td></tr></table></td></tr><tr><td align="center" style="padding:0 34px 30px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.7;color:${k.muted}">${k.footerLine}<br>${k.address ? String(k.address).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : address}<br>${siteUnsubscribe ? `<a href="${siteUnsubscribe.replace(/"/g, '%22')}" style="color:${k.link}">Unsubscribe</a><br><span style="font-size:11px;color:${k.muted}">Trouble unsubscribing? <a href="${unsubscribe}" style="color:${k.muted};text-decoration:underline">Use this link</a>.</span>` : `<a href="${unsubscribe}" style="color:${k.link}">Unsubscribe</a>`}</td></tr></table></td></tr></table></div>`;
 
 /* Plain words in, styled email HTML out. `inner` for the shell is the paragraphs; the whole page wraps it. */
 export function paragraphs(text, style) {

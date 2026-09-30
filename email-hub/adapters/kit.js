@@ -45,7 +45,7 @@ export function explain(e) {
   return new HubError('Kit did not answer just now. Try again in a minute.', 502);
 }
 
-export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, appUrl = APP, statsFor = 12 } = {}) {
+export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, appUrl = APP, statsFor = 12, fields: fieldKeys = {} } = {}) {
   const key = String(apiKey || '').trim();
   const wait = sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
 
@@ -225,7 +225,10 @@ export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, 
     contact: guard(async (cid) => {
       const [s, t] = await Promise.all([kit(`/subscribers/${id(cid, 'contact')}`), kit(`/subscribers/${cid}/tags`).catch(() => null)]);
       const sub = s?.subscriber || {};
-      return { ...contactOf(sub, (t?.tags || []).map((x) => ({ id: String(x.id), name: x.name }))), joined: sub.fields?.signup_date || null };
+      // `fields` names the custom fields a host keeps a person's original signup date and source in (e.g. after moving lists);
+      // Kit stamps everyone with the day they were IMPORTED, so that field is the only record of when they really joined.
+      const f = sub.fields || {};
+      return { ...contactOf(sub, (t?.tags || []).map((x) => ({ id: String(x.id), name: x.name }))), joined: f[fieldKeys.joined || 'signup_date'] || null, source: f[fieldKeys.source || 'source'] || null };
     }),
     addContact: guard(async ({ email: e, first, tag }) => {
       const a = email(e);
@@ -244,6 +247,10 @@ export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, 
     }),
     unsubscribeContact: guard(async (cid) => { await kit(`/subscribers/${id(cid, 'contact')}/unsubscribe`, { method: 'POST' }); return { ok: true }; }),
     createTag: guard(async (name) => { const t = await tagByName(name); return { tag: { id: t.id, name: t.name, count: 0 } }; }),
+    listTemplates: guard(async () => {
+      const d = await kit('/email_templates');
+      return { templates: (d?.email_templates || []).map((t) => ({ id: String(t.id), name: t.name, isDefault: Boolean(t.is_default) })) };
+    }),
     fields: guard(async () => {
       const d = await kit('/custom_fields');
       return { fields: (d?.custom_fields || []).map((f) => ({ tag: f.key, name: f.label || f.name, type: 'text', required: false })) };

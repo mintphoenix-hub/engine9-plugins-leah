@@ -30,6 +30,7 @@
     contact(id) / addContact(input) / tagContact(id, name, active) / unsubscribeContact(id)
     createTag(name)             { tag }
     fields()                    { fields: [{ tag, name, type, required }] }
+    listTemplates()             { templates: [{ id, name, isDefault }] }   the service's own templates, listed by name (read only)
     importContacts(input)       { count, invalid }   input: { people, tag, agreed }
     editUrl(campaign)           a link to design the email in the service
 
@@ -43,7 +44,7 @@ export class HubError extends Error {
   constructor(message, http = 400) { super(message); this.name = 'HubError'; this.http = http; }
 }
 
-export const CAPABILITIES = ['checklist', 'test', 'report', 'contacts', 'tags', 'segments', 'fields', 'import', 'editDesign', 'look'];
+export const CAPABILITIES = ['checklist', 'test', 'report', 'contacts', 'tags', 'segments', 'fields', 'import', 'editDesign', 'templates', 'look'];
 
 const REQUIRED = ['connected', 'appUrl', 'listCampaigns', 'getCampaign', 'campaignContent', 'createCampaign', 'updateCampaign', 'deleteCampaign', 'duplicateCampaign', 'schedule', 'unschedule', 'audience', 'counts', 'growth'];
 
@@ -63,7 +64,7 @@ export function capabilitiesOf(p) {
   const c = {
     checklist: has('sendChecklist'), test: has('sendTest'), report: has('campaignReport'),
     contacts: has('listContacts', 'contact'), tags: has('createTag', 'tagContact'), segments: true, fields: has('fields'),
-    import: has('importContacts'), editDesign: has('editUrl'), look: true
+    import: has('importContacts'), editDesign: has('editUrl'), templates: has('listTemplates'), look: true
   };
   return { ...c, ...(p.capabilities || {}) };
 }

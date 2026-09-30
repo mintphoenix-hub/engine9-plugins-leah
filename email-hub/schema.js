@@ -30,6 +30,7 @@ export const tables = [
       logo_url: { type: 'string', description: 'Absolute https address of the logo image' },
       logo_width: { type: 'int', description: 'Logo width in pixels, 80 to 400' },
       footer_line: { type: 'string', description: 'A line above the address and the unsubscribe link' },
+      font: { type: 'string', values: ['sans', 'serif'], description: 'The body face of the emails: sans (default) or serif. NULL = the site\'s default.' },
       created_at: 'created_at',
       modified_at: 'modified_at'
     },

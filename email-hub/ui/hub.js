@@ -9,6 +9,17 @@
       extras: { homeStats: async (days) => [{ label: 'Website visits', value: 214 }] }   // optional, host-supplied
     });
 
+  Options (all optional; the defaults are the plain look):
+    emoji: ['🌿', ...]        the host's emoji set for the composer            emojiOpen: true   the tray starts open
+    fontChoice: true          show a "Words" Sans / Serif choice on Content (writes style.font; the host's shell must honour it)
+    logoHelp: 'text'          a line under the logo choices on Content
+    extras.homeStats(days)    -> [{ label, value, note }]   extra numbers in the Home snapshot
+    extras.homeCards()        -> [{ title, html }]           extra cards on Home, under Recent campaigns (host-trusted HTML)
+    extras.homeBanner()       -> { html, label, run }        a line at the top of Home, with an optional button
+    extras.analyticsBanner()  -> { html, label, run }        the same on Analytics
+  From GET /config the screens also read `schedule: { leadMinutes, stepMinutes }` (default 15 and 15), `capabilities.templates`
+  (lists GET /templates on Content) and GET /archive (read-only emails from a previous service, merged into Past campaigns).
+
   Left nav (Create, Home, Campaigns, Audience, Analytics, Content), laid out like the service's own. Every page reads
   from the service each time it opens; nothing is stored here except an unsent draft in this browser. The only thing
   that ever reaches an audience is the Schedule box on a draft, which asks for a tick. Theme it with the --eh-* variables
@@ -40,10 +51,10 @@ const clip = (t, n) => chars(t).slice(0, n).join('');
 const kindOf = (c) => (c.status === 'save' || c.status === 'paused' ? 'draft' : c.status === 'schedule' ? 'scheduled' : 'sent');
 
 export function mountEmailHub(root, options = {}) {
-  const { base = '/mail', timeZone = 'UTC', locale = 'en-US', brandName = '', extras = {}, draftKey = 'email-hub-draft' } = options;
+  const { base = '/mail', timeZone = 'UTC', locale = 'en-US', brandName = '', extras = {}, draftKey = 'email-hub-draft', emoji = EMOJI, emojiOpen = false, fontChoice = false } = options;
   const doFetch = options.fetch || ((...a) => globalThis.fetch(...a));
   const st = { page: 'home', sub: '', days: 30, ov: null, all: [], dc: null, label: 'your email service', caps: {}, filter: 'all', open: null, mode: null, sort: 'new', q: '', audience: null, look: null, lookDraft: null, pv: 'inbox', last: 'eh-sub', reportId: null,
-    ppl: { status: 'subscribed', tag: '', email: '', after: '', stack: [], open: null, counts: null }, csv: null, appUrl: '' };
+    ppl: { status: 'subscribed', tag: '', email: '', after: '', stack: [], open: null, counts: null }, csv: null, appUrl: '', archive: [], sched: { leadMinutes: 15, stepMinutes: 15 }, homeBanner: null };
 
   /* ---- plumbing ---- */
   async function api(path, opts = {}) {
@@ -70,7 +81,8 @@ export function mountEmailHub(root, options = {}) {
   const stat = (label, value, note) => `<div class="eh-stat"><b>${esc(value)}</b><span>${esc(label)}</span>${note ? `<i>${esc(note)}</i>` : ''}</div>`;
   const bars = (rows, max) => rows.map(([l, n, t]) => `<div class="eh-bar2"><span>${esc(l)}</span><span class="eh-trk" aria-hidden="true"><i style="width:${max ? Math.round(100 * (n || 0) / max) : 0}%"></i></span><span class="eh-n">${esc(t ?? num(n))}</span></div>`).join('');
   const fit = (f) => { try { const d = f.contentDocument; if (d?.documentElement) f.style.height = d.documentElement.scrollHeight + 'px'; } catch { /* keep the default height */ } };
-  const mailTo = () => document.querySelector ? null : null;
+  const everyEmail = () => st.all.concat(st.archive);
+  const findEmail = (id) => everyEmail().find((x) => x.id === id);
 
   /* ---- shell ---- */
   root.classList.add('eh');
@@ -91,7 +103,7 @@ export function mountEmailHub(root, options = {}) {
   async function render() {
     main().innerHTML = '<p class="eh-muted">Loading…</p>';
     try {
-      if (!st.appUrl) { const c = await api('/config').catch(() => null); if (c) { st.label = c.label; st.caps = c.capabilities; st.appUrl = c.appUrl || ''; renderNav(); } }
+      if (!st.appUrl) { const c = await api('/config').catch(() => null); if (c) { st.label = c.label; st.caps = c.capabilities; st.appUrl = c.appUrl || ''; if (c.schedule) st.sched = { leadMinutes: Number(c.schedule.leadMinutes) || 15, stepMinutes: Number(c.schedule.stepMinutes) || 15 }; renderNav(); } }
       if (st.page === 'home') await home();
       else if (st.page === 'campaigns') await (st.sub === 'new' ? compose() : st.sub === 'report' ? report() : campaigns());
       else if (st.page === 'audience') await audience();
@@ -118,24 +130,33 @@ export function mountEmailHub(root, options = {}) {
     const d = await overview(); if (!d) return;
     const g = st.days === 30 ? d.growth30 : d.growth90, e = st.days === 30 ? d.email30 : d.email90, c = d.counts, camps = d.campaigns.slice(0, 5);
     const more = extras.homeStats ? await extras.homeStats(st.days).catch(() => []) : [];
+    const cards = extras.homeCards ? await extras.homeCards().catch(() => []) : [];
+    st.homeBanner = extras.homeBanner ? await extras.homeBanner().catch(() => null) : null;
     const subs = c.ok ? c.data.subscribed : d.audience?.subscribers;
     main().innerHTML = head('Home', 'How your list is doing, and what went out last.', `<select id="eh-days" aria-label="Period" style="width:auto"><option value="30"${st.days === 30 ? ' selected' : ''}>Last 30 days</option><option value="90"${st.days === 90 ? ' selected' : ''}>Last 90 days</option></select>`) +
-      `<div class="eh-grid"><div class="eh-card eh-tint"><h3>Marketing snapshot <small>The last ${st.days} days</small></h3><div class="eh-stats">${stat('Total sends', num(e.data.sent))}${stat('Open rate', pct(e.data.openRate))}${stat('Click rate', pct(e.data.clickRate))}${more.map((m) => stat(m.label, num(m.value), m.note)).join('')}${g.ok ? stat('New contacts', num(g.data.added)) + stat('Unsubscribed', num(g.data.unsubscribed)) + stat('Net growth', g.data.net > 0 ? `+${g.data.net}` : String(g.data.net)) : `<p class="eh-msg eh-bad">${esc(g.error)}</p>`}</div></div>
+      (st.homeBanner ? `<div class="eh-card" style="margin-bottom:1.4rem;display:flex;flex-wrap:wrap;gap:.6rem 1.2rem;align-items:center;justify-content:space-between"><span>${st.homeBanner.html}</span>${st.homeBanner.label ? `<button type="button" class="eh-btn eh-o eh-s" data-act="home-banner">${esc(st.homeBanner.label)}</button>` : ''}</div>` : '') + `<div class="eh-grid"><div class="eh-card eh-tint"><h3>Marketing snapshot <small>The last ${st.days} days</small></h3><div class="eh-stats">${stat('Total sends', num(e.data.sent))}${stat('Open rate', pct(e.data.openRate))}${stat('Click rate', pct(e.data.clickRate))}${more.map((m) => stat(m.label, num(m.value), m.note)).join('')}${g.ok ? stat('New contacts', num(g.data.added)) + stat('Unsubscribed', num(g.data.unsubscribed)) + stat('Net growth', g.data.net > 0 ? `+${g.data.net}` : String(g.data.net)) : `<p class="eh-msg eh-bad">${esc(g.error)}</p>`}</div></div>
       <div class="eh-card"><h3>Recent campaigns <button type="button" class="eh-link eh-small" data-act="nav" data-page="campaigns">All campaigns &rarr;</button></h3>${camps.length ? recentTable(camps) : '<p class="eh-small eh-muted">Nothing yet. Use Create to write your first email.</p>'}</div>
+      ${cards.map((c) => `<div class="eh-card"><h3>${esc(c.title)}</h3>${c.html}</div>`).join('')}
       <div class="eh-card"><h3>Audience <button type="button" class="eh-link eh-small" data-act="nav" data-page="audience">Audience &rarr;</button></h3>${stat('Total contacts', num(subs), 'Subscribed, can be emailed')}
-        ${c.ok ? `<div style="margin-top:.9rem;font-size:.9rem">${[['Unsubscribed', c.data.unsubscribed], ['Bounced', c.data.cleaned], ['Not confirmed yet', c.data.pending]].map(([l, n]) => `<div style="display:flex;justify-content:space-between;padding:.25rem 0;border-top:1px solid var(--eh-rule)"><span class="eh-muted">${l}</span><span>${num(n)}</span></div>`).join('')}</div>` : ''}</div></div>`;
+        ${c.ok ? `<div style="margin-top:.9rem;font-size:calc(.9rem*var(--eh-scale,1))">${[['Unsubscribed', c.data.unsubscribed], ['Bounced', c.data.cleaned], ['Not confirmed yet', c.data.pending]].map(([l, n]) => `<div style="display:flex;justify-content:space-between;padding:.25rem 0;border-top:1px solid var(--eh-rule)"><span class="eh-muted">${l}</span><span>${num(n)}</span></div>`).join('')}</div>` : ''}</div></div>`;
   }
 
   /* ---- Campaigns ---- */
   async function campaigns() {
     const d = await api('/campaigns');
     if (d.connected === false) { st.label = d.label || st.label; main().innerHTML = off(); return; }
-    st.all = d.campaigns; st.dc = d.dc || st.dc; draw(true);
+    st.all = d.campaigns; st.dc = d.dc || st.dc;
+    // Emails carried over from a service that is gone or replaced: read-only, and nothing is shown when there are none.
+    const a = await api('/archive').catch(() => ({ archive: [] }));
+    const frac = (v) => (v == null ? null : Number(v) > 1 ? Number(v) / 100 : Number(v));
+    st.archive = (a.archive || []).map((r) => ({ id: `arch:${r.source}:${r.id}`, archive: true, source: r.source, sourceId: r.id, status: 'sent', subject: r.subject || r.title || '', title: r.title || '', preview: r.previewText || '', audience: r.audience || '', segment: r.segmentText || '',
+      recipients: r.emailsSent ?? null, sent: r.emailsSent ?? null, created: r.sentAt || null, when: r.sentAt || null, openRate: frac(r.openRate), clickRate: frac(r.clickRate), stats: { opened: r.uniqueOpens ?? null, clicked: r.clicks ?? null }, archiveUrl: r.archiveUrl || null, editUrl: null }));
+    draw(true);
   }
   function draw(full) {
-    const all = st.all, drafts = all.filter((c) => kindOf(c) === 'draft'), sched = all.filter((c) => kindOf(c) === 'scheduled'), sent = all.filter((c) => kindOf(c) === 'sent');
+    const all = everyEmail(), drafts = all.filter((c) => kindOf(c) === 'draft'), sched = all.filter((c) => kindOf(c) === 'scheduled'), sent = all.filter((c) => kindOf(c) === 'sent');
     const next = sched.slice().sort((a, b) => String(a.when).localeCompare(b.when))[0], rates = sent.map((c) => c.openRate).filter((r) => r != null);
-    const tiles = [['all', 'All emails', all.length, `In ${st.label}`], ['draft', 'Drafts', drafts.length, drafts.length ? 'Not sent, not scheduled' : 'None waiting'], ['scheduled', 'Scheduled', sched.length, next ? `Next: ${short(next.when)}` : 'Nothing queued'], ['sent', 'Past campaigns', sent.length, rates.length ? `Avg ${pct(rates.reduce((a, b) => a + b, 0) / rates.length)} opened` : 'Nothing sent yet']];
+    const tiles = [['all', 'All emails', all.length, st.archive.length ? `${st.label} and the archive` : `In ${st.label}`], ['draft', 'Drafts', drafts.length, drafts.length ? 'Not sent, not scheduled' : 'None waiting'], ['scheduled', 'Scheduled', sched.length, next ? `Next: ${short(next.when)}` : 'Nothing queued'], ['sent', 'Past campaigns', sent.length, rates.length ? `Avg ${pct(rates.reduce((a, b) => a + b, 0) / rates.length)} opened` : 'Nothing sent yet']];
     const q = st.q.trim().toLowerCase(), t = (c) => Date.parse(c.when || c.created || 0) || 0;
     let rows = all.filter((c) => (st.filter === 'all' || kindOf(c) === st.filter) && (!q || `${c.subject} ${c.title} ${c.preview}`.toLowerCase().includes(q)));
     rows = rows.slice().sort(st.sort === 'az' ? (a, b) => (a.subject || a.title).localeCompare(b.subject || b.title) : st.sort === 'old' ? (a, b) => t(a) - t(b) : (a, b) => t(b) - t(a));
@@ -153,12 +174,12 @@ export function mountEmailHub(root, options = {}) {
     const dateLine = k === 'scheduled' ? `Goes out ${when(c.when)}` : k === 'sent' ? `Sent ${when(c.when)}` : `Started ${short(c.created)}`;
     const strip = k === 'sent' ? `<dl class="eh-strip"><div><dt>Sent to</dt><dd>${num(c.sent ?? c.recipients)}</dd></div><div style="width:11rem"><dt>Opened</dt><dd>${pct(c.openRate)}${c.stats?.opened != null ? ` <small>${num(c.stats.opened)} people</small>` : ''}</dd><span class="eh-trk" aria-hidden="true"><i style="width:${Math.min(100, Math.round((c.openRate || 0) * 100))}%"></i></span></div><div><dt>Clicked</dt><dd>${pct(c.clickRate)}${c.stats?.clicked != null ? ` <small>${num(c.stats.clicked)} people</small>` : ''}</dd></div></dl>`
       : c.recipients != null ? `<p class="eh-small eh-muted" style="margin-top:.9rem">Would reach about <strong style="font-weight:500;color:var(--eh-ink)">${num(c.recipients)}</strong> people today</p>` : '';
-    const items = [['m-preview', 'Preview'], k === 'draft' && ['m-schedule', 'Schedule…'], k === 'scheduled' && ['unsched', 'Unschedule'], k === 'draft' && ['m-edit', 'Edit details…'], st.caps.test && ['m-test', 'Send a test…'], ['dup', 'Duplicate'], k === 'draft' && ['m-delete', 'Delete draft', 1], k === 'sent' && st.caps.report && ['report', 'View report']].filter(Boolean);
+    const items = c.archive ? [['m-preview', 'Preview']] : [['m-preview', 'Preview'], k === 'draft' && ['m-schedule', 'Schedule…'], k === 'scheduled' && ['unsched', 'Unschedule'], k === 'draft' && ['m-edit', 'Edit details…'], st.caps.test && ['m-test', 'Send a test…'], ['dup', 'Duplicate'], k === 'draft' && ['m-delete', 'Delete draft', 1], k === 'sent' && st.caps.report && ['report', 'View report']].filter(Boolean);
     return `<li class="eh-rowx k-${k}${open ? ' eh-open' : ''}"><div class="eh-rowx-top"><div class="eh-rowx-main"><span class="eh-sicon ${k}" aria-hidden="true">${svg(ICON[k])}</span><div class="eh-rowx-body">
-      <button type="button" class="eh-subj" data-act="${k === 'sent' && st.caps.report ? 'report' : 'review'}" data-id="${id}">${esc(name)}</button>
-      <p class="eh-facts">${tag(c)}<span>${esc(dateLine)}</span>${c.title && c.title !== c.subject ? `<span>${esc(c.title)}</span>` : ''}<span>${c.segment ? 'To one group' : 'To everyone'}</span></p>
+      <button type="button" class="eh-subj" data-act="${k === 'sent' && st.caps.report && !c.archive ? 'report' : 'review'}" data-id="${id}">${esc(name)}</button>
+      <p class="eh-facts">${tag(c)}${c.archive ? `<span class="eh-src" title="Kept from ${esc(c.source)}, read-only">${esc(c.source)}</span>` : ''}<span>${esc(dateLine)}</span>${c.title && c.title !== c.subject ? `<span>${esc(c.title)}</span>` : ''}${c.archive ? '' : `<span>${c.segment ? 'To one group' : 'To everyone'}</span>`}</p>
       ${c.preview ? `<p class="eh-prev" title="${esc(c.preview)}">${esc(c.preview)}</p>` : ''}${strip}</div></div>
-      <div class="eh-rowx-side">${k === 'sent' && st.caps.report ? `<button type="button" class="eh-btn eh-o eh-s" data-act="report" data-id="${id}">View report</button>` : `<button type="button" class="eh-btn eh-o eh-s" data-act="review" data-id="${id}" aria-expanded="${open}">${open ? 'Close' : 'Review'}</button>`}
+      <div class="eh-rowx-side">${k === 'sent' && st.caps.report && !c.archive ? `<button type="button" class="eh-btn eh-o eh-s" data-act="report" data-id="${id}">View report</button>` : `<button type="button" class="eh-btn eh-o eh-s" data-act="review" data-id="${id}" aria-expanded="${open}">${open ? 'Close' : 'Review'}</button>`}
       <div class="eh-menu"><button type="button" class="eh-more" data-act="menu" data-id="${id}" aria-haspopup="menu" aria-expanded="false" aria-label="More for ${esc(name)}">&#8943;</button><ul class="eh-menu-list eh-hide" role="menu">${items.map(([a, l, dg]) => `<li role="none"><button type="button" role="menuitem" data-act="${a}" data-id="${id}"${dg ? ' class="eh-dangerous"' : ''}>${l}</button></li>`).join('')}${c.editUrl ? `<li role="none"><a role="menuitem" href="${esc(c.editUrl)}" target="_blank" rel="noopener">Open in ${esc(st.label)} &#8599;</a></li>` : ''}</ul></div></div></div>
       ${open ? `<div class="eh-panel">${panel(c, k)}</div>` : ''}</li>`;
   }
@@ -175,31 +196,36 @@ export function mountEmailHub(root, options = {}) {
     acts.push(`<button class="eh-btn eh-o eh-s" type="button" data-act="dup" data-id="${id}">Duplicate</button>`);
     if (k === 'draft') acts.push(`<button class="eh-btn eh-danger eh-s" type="button" data-act="m-delete" data-id="${id}">Delete draft</button>`);
     if (c.editUrl) acts.push(`<a class="eh-btn eh-o eh-s" href="${esc(c.editUrl)}" target="_blank" rel="noopener">Edit the design in ${esc(st.label)} &#8599;</a>`);
+    if (c.archive) return `<div class="eh-panel-grid"><div class="eh-frame-box"><div class="eh-frame-head"><small>KEPT FROM ${esc(String(c.source).toUpperCase())}, READ-ONLY</small><b>${esc(c.subject || '(no subject)')}</b>${c.preview ? `<span>${esc(c.preview)}</span>` : ''}</div><iframe class="eh-frame" sandbox="allow-same-origin" title="Preview of ${esc(c.subject)}" data-frame="${id}"></iframe></div>
+      <aside class="eh-aside"><dl class="eh-dl"><dt>Status</dt><dd>${tag(c)}</dd><dt>Source</dt><dd>${esc(c.source)}</dd><dt>Sent</dt><dd>${esc(when(c.when))}</dd><dt>To</dt><dd>${esc(c.audience || 'The list')}${c.recipients != null ? ` <span class="eh-muted">(${num(c.recipients)} people)</span>` : ''}</dd><dt>Opened</dt><dd>${pct(c.openRate)}</dd><dt>Clicked</dt><dd>${pct(c.clickRate)}</dd></dl>${c.archiveUrl ? `<a class="eh-btn eh-o eh-s" href="${esc(c.archiveUrl)}" target="_blank" rel="noopener">Open the web copy &#8599;</a>` : ''}</aside></div>`;
     return `<div class="eh-panel-grid"><div class="eh-frame-box"><div class="eh-frame-head"><small>FROM ${esc((brandName || 'you').toUpperCase())}</small><b>${esc(c.subject || '(no subject yet)')}</b>${c.preview ? `<span>${esc(c.preview)}</span>` : ''}</div><iframe class="eh-frame" sandbox="allow-same-origin" title="Preview of ${esc(c.subject)}" data-frame="${id}"></iframe></div>
       <aside class="eh-aside"><dl class="eh-dl"><dt>Status</dt><dd>${tag(c)}</dd><dt>To</dt><dd>${esc(c.segment ? 'One group' : 'Everyone on the list')}${c.recipients != null ? ` <span class="eh-muted">(${num(c.recipients)} people)</span>` : ''}</dd><dt>${k === 'scheduled' ? 'Goes out' : k === 'sent' ? 'Sent' : 'Started'}</dt><dd>${esc(k === 'draft' ? short(c.created) : when(c.when))}</dd>${c.title && c.title !== c.subject ? `<dt>Name</dt><dd>${esc(c.title)}</dd>` : ''}</dl>
       ${k === 'draft' && st.caps.checklist ? '<div id="eh-ready" class="eh-small eh-muted">Checking with ' + esc(st.label) + '…</div>' : ''}<div class="eh-acts">${acts.join('')}</div><p class="eh-msg" id="eh-rowmsg" role="status" aria-live="polite"></p>${box}</aside></div>`;
   }
+  /* "on the quarter hour" for 15, "to the minute" for 1, otherwise "rounded up to the next N minutes". */
+  const stepWords = () => (st.sched.stepMinutes === 15 ? 'go out on the quarter hour' : st.sched.stepMinutes === 1 ? 'go out at the minute you choose' : `are rounded up to the next ${st.sched.stepMinutes} minutes`);
   function scheduleBox(c) {
-    return `<div class="eh-box"><strong>Schedule it</strong><p class="eh-small eh-muted" style="margin:.2rem 0 .6rem">This sends to ${num(c.recipients)} people. Times are ${esc(timeZone.replace(/_/g, ' '))} time and go out on the quarter hour, at least 15 minutes from now.</p>
-      <div class="eh-field"><input type="datetime-local" id="eh-when" step="900" style="max-width:15rem" aria-label="Day and time to send"></div><p class="eh-small" id="eh-when-note" style="margin:0 0 .6rem"></p>
+    return `<div class="eh-box"><strong>Schedule it</strong><p class="eh-small eh-muted" style="margin:.2rem 0 .6rem">This sends to ${num(c.recipients)} people. Times are ${esc(timeZone.replace(/_/g, ' '))} time and ${stepWords()}, at least ${st.sched.leadMinutes} minutes from now.</p>
+      <div class="eh-field"><input type="datetime-local" id="eh-when" step="${st.sched.stepMinutes * 60}" style="max-width:15rem" aria-label="Day and time to send"></div><p class="eh-small" id="eh-when-note" style="margin:0 0 .6rem"></p>
       <label class="eh-check" style="margin-bottom:.8rem"><input type="checkbox" id="eh-ok"><span>I have read the preview and it is right. Send it to this list at that time.</span></label>
       <div class="eh-row"><button class="eh-btn" type="button" data-act="sched" data-id="${esc(c.id)}" id="eh-sched" disabled>Schedule it</button><button class="eh-btn eh-o eh-s" type="button" data-act="mode-x">Cancel</button></div></div>`;
   }
   async function loadPreview(id) {
     const f = root.querySelector(`[data-frame="${id}"]`); if (!f) return;
     f.addEventListener('load', () => fit(f));
-    try { const d = await api(`/campaigns/${id}/content`); f.srcdoc = d.html || '<p style="font-family:sans-serif;padding:1rem">No content yet.</p>'; }
+    const own = findEmail(id);
+    try { const d = await api(own?.archive ? `/archive/${own.source}/${own.sourceId}/content` : `/campaigns/${id}/content`); f.srcdoc = d.html || '<p style="font-family:sans-serif;padding:1rem">No content yet.</p>'; }
     catch (err) { f.srcdoc = `<p style="font-family:sans-serif;padding:1rem">${esc(err.message)}</p>`; }
-    const c = st.all.find((x) => x.id === id); if (!c || kindOf(c) !== 'draft' || !st.caps.checklist) return;
+    const c = findEmail(id); if (!c || kindOf(c) !== 'draft' || !st.caps.checklist) return;
     try { const r = await api(`/campaigns/${id}/checklist`); const el = $('#eh-ready'); if (!el) return;
       el.innerHTML = r.ready ? `<span>&#10003;</span> ${esc(st.label)} says this is ready to send.` : '<span>&#33;</span> Not ready yet:<ul style="margin:.3rem 0 0;padding-left:1.2rem;list-style:disc">' + r.problems.map((p) => `<li>${esc(p.heading || p.details)}</li>`).join('') + '</ul>';
     } catch (err) { const el = $('#eh-ready'); if (el) el.textContent = err.message; }
   }
   /* The time she picked is read on the site's own clock, then rounded up to the quarter hour the way the server does. */
-  const whenAt = (v) => { const ms = wallToUtc(v, timeZone); return Number.isFinite(ms) ? Math.ceil(ms / 9e5) * 9e5 : NaN; };
+  const whenAt = (v) => { const ms = wallToUtc(v, timeZone), step = st.sched.stepMinutes * 60000; return Number.isFinite(ms) ? Math.ceil(ms / step) * step : NaN; };
 
   async function act(action, btn) {
-    const id = btn.dataset.id || st.open, c = st.all.find((x) => x.id === id); if (!c) return;
+    const id = btn.dataset.id || st.open, c = findEmail(id); if (!c || (c.archive && action !== 'm-preview')) return;
     const open = (mode) => { st.open = id; st.mode = mode; draw(false); root.querySelector('.eh-rowx.eh-open')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); };
     if (action === 'm-preview') return open(null);
     if (action === 'm-schedule') return open('schedule');
@@ -238,9 +264,9 @@ export function mountEmailHub(root, options = {}) {
     main().innerHTML = head('Create email', `Write it here, see it as an inbox will, and save it as a draft in ${st.label}. Nothing goes out until you schedule it.`, '<button class="eh-btn eh-o eh-s" type="button" data-act="nav" data-page="campaigns">&larr; All campaigns</button>') + `<div class="eh-comp"><div class="eh-comp-l">
       ${restored ? '<p class="eh-flash" role="status" style="margin:0">Picked up where you left off. <button type="button" class="eh-link" data-act="fresh">Start a new one</button></p>' : ''}
       ${step(1, 'Who it is for', 'Everyone on your list, or one group.', '<div class="eh-field" style="margin:0"><label for="eh-to">Send to</label><select id="eh-to"><option value="">Everyone on your list</option></select><p class="eh-small" id="eh-to-n" style="margin:.5rem 0 0"></p></div>')}
-      ${step(2, 'Subject and preview', 'The two lines a person reads before they open it.', `<div class="eh-field"><div class="eh-lab"><label for="eh-sub">Subject line</label><span class="eh-count" id="eh-sub-n"></span></div><input id="eh-sub" type="text" maxlength="150" autocomplete="off" style="font-size:1.05rem"></div>
+      ${step(2, 'Subject and preview', 'The two lines a person reads before they open it.', `<div class="eh-field"><div class="eh-lab"><label for="eh-sub">Subject line</label><span class="eh-count" id="eh-sub-n"></span></div><input id="eh-sub" type="text" maxlength="150" autocomplete="off" style="font-size:calc(1.05rem*var(--eh-scale,1))"></div>
         <div class="eh-field"><div class="eh-lab"><label for="eh-pre">Preview text</label><span class="eh-count" id="eh-pre-n"></span></div><input id="eh-pre" type="text" maxlength="150" autocomplete="off" placeholder="The line after the subject in an inbox"></div>
-        <div class="eh-emoji-box"><button type="button" class="eh-link eh-emoji-toggle" data-act="emoji-toggle" aria-expanded="false" aria-controls="eh-emoji-tray"><span aria-hidden="true">&#128578;</span> Add an emoji <span class="eh-caret" aria-hidden="true">&#9662;</span></button><div id="eh-emoji-tray" class="eh-hide"><p class="eh-small eh-muted" style="margin:.6rem 0 0">Goes wherever you were last typing.</p><div class="eh-emoji" role="group" aria-label="Emoji">${EMOJI.map((x) => `<button type="button" data-act="emoji" aria-label="Add ${x}">${x}</button>`).join('')}</div><p class="eh-small eh-muted" style="margin:.5rem 0 0">For any other emoji: on a Mac press Control + Command + Space; on Windows press the Windows key + period.</p></div>`)}
+        <div class="eh-emoji-box"><button type="button" class="eh-link eh-emoji-toggle" data-act="emoji-toggle" aria-expanded="${emojiOpen}" aria-controls="eh-emoji-tray"><span aria-hidden="true">&#128578;</span> Add an emoji <span class="eh-caret" aria-hidden="true">&#9662;</span></button><div id="eh-emoji-tray" class="${emojiOpen ? '' : 'eh-hide'}"><p class="eh-small eh-muted" style="margin:.6rem 0 0">Goes wherever you were last typing.</p><div class="eh-emoji" role="group" aria-label="Emoji">${emoji.map((x) => `<button type="button" data-act="emoji" aria-label="Add ${x}">${x}</button>`).join('')}</div><p class="eh-small eh-muted" style="margin:.5rem 0 0">For any other emoji: on a Mac press Control + Command + Space; on Windows press the Windows key + period.</p></div>`)}
       ${step(3, 'The email', 'Write it plainly. A blank line starts a new paragraph, and links work as they are.', `<div class="eh-field"><div class="eh-lab"><label for="eh-text">Message</label><span class="eh-count" id="eh-words"></span></div><textarea id="eh-text" rows="14" maxlength="20000" placeholder="Write it plainly.&#10;&#10;A blank line starts a new paragraph. Links like https://example.org work as they are.&#10;&#10;Your logo, footer and unsubscribe line are added for you."></textarea><p class="eh-small eh-muted" style="margin:.4rem 0 0">Want it designed, with pictures and buttons? Save the draft, then use &ldquo;Edit the design in ${esc(st.label)}&rdquo; on it. The logo, colours and footer are set under Content.</p></div>
         <div class="eh-field" style="margin:0;padding-top:1rem;border-top:1px solid var(--eh-rule)"><label for="eh-title">Name in ${esc(st.label)} <span class="eh-muted" style="text-transform:none;letter-spacing:0">(optional)</span></label><input id="eh-title" type="text" maxlength="100" autocomplete="off" placeholder="Defaults to the subject line"></div>`)}
       <div class="eh-row"><button class="eh-btn" type="button" data-act="save-draft">Save draft to ${esc(st.label)}</button><button class="eh-btn eh-o" type="button" data-act="nav" data-page="campaigns">Cancel</button><span class="eh-small eh-muted">Nothing is sent. You schedule it from Campaigns, after a look.</span></div><p class="eh-msg" id="eh-msg" role="status" aria-live="polite"></p></div>
@@ -370,11 +396,18 @@ export function mountEmailHub(root, options = {}) {
       ${options.logoHelp ? `<p class="eh-small eh-muted" style="margin:.2rem 0 1rem">${esc(options.logoHelp)}</p>` : ''}
       <div class="eh-field"><label for="lk-w">Logo width: <span id="lk-wn">${st.lookDraft.logoWidth}</span>px</label><input id="lk-w" type="range" min="80" max="400" step="10" value="${st.lookDraft.logoWidth}" style="width:100%"></div>
       <div class="eh-small eh-muted" style="margin-bottom:.4rem">Colours</div><div class="eh-colors">${COLORS.map(([k, l]) => `<label><input type="color" data-k="${k}" value="${esc(st.lookDraft[k])}"><span>${l}<small>${esc(st.lookDraft[k])}</small></span></label>`).join('')}</div>
+      ${fontChoice ? `<div class="eh-field" style="margin-top:1rem"><label for="lk-font">Words</label><select id="lk-font"><option value="sans"${(st.lookDraft.font || 'sans') === 'sans' ? ' selected' : ''}>Sans</option><option value="serif"${st.lookDraft.font === 'serif' ? ' selected' : ''}>Serif</option></select><p class="eh-small eh-muted" style="margin:.3rem 0 0">The typeface for the words of your emails.</p></div>` : ''}
       <div class="eh-field" style="margin-top:1rem"><label for="lk-f">Footer line</label><input id="lk-f" type="text" maxlength="120" value="${esc(st.lookDraft.footerLine)}"><p class="eh-small eh-muted" style="margin:.3rem 0 0">Sits above your address and the unsubscribe link, which every email carries and this cannot remove.</p></div>
       <div class="eh-field"><label for="lk-a">Postal address</label><textarea id="lk-a" rows="2" maxlength="200" placeholder="Street, suburb, state and postcode">${esc(st.lookDraft.address || '')}</textarea><p class="eh-small eh-muted" style="margin:.3rem 0 0">Shown at the bottom of every email. Leave it empty to use the address saved in your ${esc(st.label)} account.</p></div>
       <div class="eh-row"><button class="eh-btn" type="button" data-act="look-save">Save look</button><button class="eh-btn eh-o" type="button" data-act="look-reset">Put back the original</button><span class="eh-msg" id="lk-m" role="status" aria-live="polite"></span></div></div>
       <div><div class="eh-small eh-muted" style="margin-bottom:.4rem">Preview</div><div class="eh-frame-box"><iframe id="lk-pv" class="eh-frame" sandbox="allow-same-origin" title="Preview of the email look" style="height:34rem"></iframe></div><p class="eh-small eh-muted" style="margin-top:.5rem">Emails already scheduled or sent keep the look they were made with. Drafts keep theirs too; make a new one, or duplicate one, to pick up a change.</p></div></div></div>`;
     lookPreview();
+    if (st.caps.templates) {
+      try {
+        const t = await api('/templates'); const list = t.templates || [];
+        $('.eh-main').insertAdjacentHTML('beforeend', `<div class="eh-card" style="margin-top:1.4rem"><h3>Templates in ${esc(st.label)}</h3>${list.length ? `<ul class="eh-people">${list.map((x) => `<li><div class="eh-person eh-static"><span>${esc(x.name)}</span><span></span><span>${x.isDefault ? '<span class="eh-tag">Default</span>' : ''}</span></div></li>`).join('')}</ul>` : '<p class="eh-small eh-muted" style="margin:0">No templates.</p>'}<p class="eh-small eh-muted" style="margin:.8rem 0 0">These live in ${esc(st.label)} and are listed here by name only.</p></div>`);
+      } catch { /* the list is a courtesy; the screen works without it */ }
+    }
   }
   function lookPreview() { const f = $('#lk-pv'); if (f) f.srcdoc = bodyHtml('Hello there,\n\nThis is how the words of an email sit on the card, with a link: https://example.org\n\nWarmly,\n' + (brandName || 'Your name'), { style: st.lookDraft, address: 'Your postal address', unsubscribe: '#', brand: { style: st.look?.defaults } }); }
 
@@ -403,6 +436,7 @@ export function mountEmailHub(root, options = {}) {
     if (a === 'pv') { st.pv = b.dataset.pv; root.querySelectorAll('[data-act="pv"]').forEach((x) => x.setAttribute('aria-selected', String(x === b))); $('#eh-pv-inbox').classList.toggle('eh-hide', st.pv !== 'inbox'); $('#eh-pv-open').classList.toggle('eh-hide', st.pv !== 'open'); return preview(); }
     if (a === 'save-draft') return saveDraft(b);
     if (a === 'banner') return st.banner?.run?.();
+    if (a === 'home-banner') return st.homeBanner?.run?.();
     if (a === 'asub') { st.sub = b.dataset.sub; return audience(); }
     if (a === 'pstate') { Object.assign(st.ppl, { status: b.dataset.s, tag: '', email: '', after: '', stack: [], open: null }); return contacts(true); }
     if (a === 'ppage') { const p = st.ppl; if (b.dataset.d === '1') { p.stack.push(p.after); p.after = b.dataset.next; } else p.after = p.stack.pop() || ''; p.open = null; return contacts(false); }
@@ -451,7 +485,7 @@ export function mountEmailHub(root, options = {}) {
     const id = e.target.id;
     if (['eh-sub', 'eh-pre', 'eh-title', 'eh-text'].includes(id)) return preview();
     if (id === 'eh-q') { st.q = e.target.value; return draw(false); }
-    if (id === 'eh-when' || id === 'eh-ok') { const at = whenAt($('#eh-when').value), ok = Number.isFinite(at) && at >= Date.now() + 15 * 60000; $('#eh-when-note').textContent = Number.isFinite(at) ? (ok ? `It will go out ${when(new Date(at).toISOString())}.` : 'Choose a time at least 15 minutes from now.') : ''; $('#eh-sched').disabled = !(ok && $('#eh-ok').checked); return; }
+    if (id === 'eh-when' || id === 'eh-ok') { const at = whenAt($('#eh-when').value), ok = Number.isFinite(at) && at >= Date.now() + st.sched.leadMinutes * 60000; $('#eh-when-note').textContent = Number.isFinite(at) ? (ok ? `It will go out ${when(new Date(at).toISOString())}.` : `Choose a time at least ${st.sched.leadMinutes} minutes from now.`) : ''; $('#eh-sched').disabled = !(ok && $('#eh-ok').checked); return; }
     if (id === 'lk-w') { st.lookDraft.logoWidth = Number(e.target.value); $('#lk-wn').textContent = e.target.value; return lookPreview(); }
     if (id === 'lk-f') { st.lookDraft.footerLine = e.target.value; return lookPreview(); }
     if (id === 'lk-a') { st.lookDraft.address = e.target.value; return lookPreview(); }
@@ -460,9 +494,10 @@ export function mountEmailHub(root, options = {}) {
   root.addEventListener('change', async (e) => {
     const id = e.target.id;
     if (id === 'eh-sort') { st.sort = e.target.value; return draw(false); }
+    if (id === 'lk-font') { st.lookDraft.font = e.target.value; return lookPreview(); }
     if (id === 'eh-days') { st.days = Number(e.target.value); return home(); }
     if (id === 'eh-when' || id === 'eh-ok') return e.target.dispatchEvent(new Event('input', { bubbles: true }));
-    if (id === 'eh-to') { const o = e.target.selectedOptions[0]; $('#eh-to-n').textContent = o?.dataset.n ? `${o.dataset.n} people` : ''; return preview(); }
+    if (id === 'eh-to') { const o = e.target.selectedOptions[0]; $('#eh-to-n').textContent = String(e.target.value).startsWith('s:') ? `${st.label} works out who is in this group at the moment it sends.` : o?.dataset.n ? `About ${Number(o.dataset.n).toLocaleString(locale)} ${Number(o.dataset.n) === 1 ? 'person' : 'people'} will get this.` : ''; return preview(); }
     if (id === 'eh-ptag') { Object.assign(st.ppl, { tag: e.target.value, email: '', after: '', stack: [], open: null }); return contacts(false); }
     if (id === 'lk-up') {
       const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; const t = $('#lk-up-t'), m = $('#lk-m');

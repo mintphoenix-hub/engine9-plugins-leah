@@ -197,6 +197,10 @@ export function createMailchimpProvider({ apiKey, listId, fromName = '', replyTo
     }),
     unsubscribeContact: guard(async (id) => { await mc(`/lists/${list}/members/${hid(id)}`, { method: 'PATCH', body: { status: 'unsubscribed' } }); return { ok: true }; }),
     createTag: guard(async (name) => { const t = await mc(`/lists/${list}/segments`, { method: 'POST', body: { name, static_segment: [] } }); return { tag: { id: t.id, name: t.name, count: 0 } }; }),
+    listTemplates: guard(async () => {
+      const d = await mc('/templates?type=user&count=100&fields=templates.id,templates.name');
+      return { templates: (d.templates || []).map((t) => ({ id: String(t.id), name: t.name, isDefault: false })) };
+    }),
     fields: guard(async () => {
       const d = await mc(`/lists/${list}/merge-fields?count=100&fields=merge_fields.tag,merge_fields.name,merge_fields.type,merge_fields.required`);
       return { fields: (d.merge_fields || []).map((f) => ({ tag: f.tag, name: f.name, type: f.type, required: Boolean(f.required) })) };

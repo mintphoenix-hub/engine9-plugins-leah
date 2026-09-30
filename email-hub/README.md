@@ -86,6 +86,15 @@ On most free plans the service's hosted unsubscribe page cannot be branded or re
 
 What it cannot promise: anyone who knows an address can unsubscribe it (the link has no login, which is why step 2 asks for a click); and whether the service fills a merge tag inside a link is the service's behavior, so check the first real send. A provider without `unsubscribeByEmail` answers 501 and the hub keeps using the service's link alone.
 
+## Options a host may set
+
+Everything below is optional and defaults to the neutral behavior, so a site that sets none of it is unchanged.
+
+- `createEmailHub({ schedule: { leadMinutes, stepMinutes } })`: the notice required before a send and the boundary it lands on. The defaults, 15 and 15, are the strictest common ground (Mailchimp only sends on the quarter hour); a host on a service without that limit (Kit) may loosen them, never under one minute. The screens read the rules from `GET /config` (`schedule`). Nothing else about the scheduling guard is configurable.
+- `brand.style.font` (`'sans'` or `'serif'`): the body face of the emails, a web-safe stack (an email client loads no web fonts). It is also a choice in the look editor and is stored in the look (`engine9_email_hub_style.font`).
+- `createKitProvider({ fields: { joined, source } })`: the names of the custom fields a host keeps a person's original signup date and source in. Kit stamps everyone with the day they were imported, so after moving a list those fields are the only record of when a person really joined. `GET /contacts/<id>` returns them as `joined` and `source`.
+- `provider.listTemplates()` (optional; Kit and Mailchimp have it): the service's own email templates by name, read only, at `GET /templates`, advertised as `capabilities.templates`.
+
 ## Data model
 
 | Table | Purpose |
@@ -122,7 +131,12 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 
 `core-tested.json` records the core commit this package was last tested against, and `.github/workflows/core-updates.yml` checks for a newer one every six hours. See [AGENTS.md](../AGENTS.md#keeping-up-with-core).
 
+## Host settings for the screens
+
+`mountEmailHub(root, options)` takes `emoji`, `emojiOpen`, `fontChoice`, `logoHelp` and `extras.{homeStats, homeCards, homeBanner, analyticsBanner}`, and the look takes `--eh-primary`, `--eh-on-primary`, `--eh-heading-font`, `--eh-heading-transform`, `--eh-heading-tracking`, `--eh-scale` and `--eh-numerals`. All are optional and fall back to the plain look; the headers of `ui/hub.js` and `ui/hub.css` list them. `GET /config` may carry `schedule: { leadMinutes, stepMinutes }`, which the Schedule box uses for its input step and wording.
+
 ## Version history
 
+- **3.9.0**: Options for hosts, all additive and defaulting to today's behavior: a body font (`brand.style.font`, stored as `style.font`; migrate an existing install with `migrate-3.9.0.sql`), loosenable scheduling rules (`createEmailHub({ schedule })`, told to the screens by `/config`), the service's templates listed by name (`GET /templates`, `capabilities.templates`), and the Kit adapter's `fields` option for a contact's original signup date and source.
 - **3.7.1**: The Audience choices (All contacts, Tags, Segments, Fields, Import contacts) are a submenu under Audience in the left nav. One corner size (`--eh-radius`, 10px) for buttons, nav, tabs, tiles, cards, fields and tags. `core-updates` ignores any lockfile and records the core commit npm really installed; interfaces are taken from their repository like core. No table, setting or export changed.
 - **3.7.0**: First release. Provider contract with Mailchimp, Kit and in-memory adapters; `createEmailHub`; the browser screens; the look of the emails with an optional postal address and logo uploads; the unsubscribe-through-your-own-website flow; the `core-updates` workflow.

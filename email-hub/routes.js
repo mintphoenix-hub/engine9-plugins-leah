@@ -9,7 +9,7 @@
   scheduling is guarded (schedule.js), only a draft can change or go, and a test send goes only to the addresses given.
 */
 import { assertProvider, capabilitiesOf, HubError } from './provider.js';
-import { planSchedule, isDraft } from './schedule.js';
+import { planSchedule, isDraft, scheduleRules } from './schedule.js';
 import { bodyHtml, checkStyle, defaultStyle, StyleError } from './shell.js';
 import { cleanPeople, isEmail, MAX_IMPORT } from './csv.js';
 import { emailsIn } from './stats.js';
@@ -25,9 +25,10 @@ export function parseTo(to) {
   return m[1] === 't' ? { tagId: m[2] } : { segmentId: m[2] };
 }
 
-const ROUTE = /^\/(campaigns|audience|overview|contacts|tags|fields|import|look|config)(?:\/([A-Za-z0-9_-]+))?(?:\/(content|duplicate|schedule|unschedule|test|checklist|report|tags|unsubscribe))?$/;
+const ROUTE = /^\/(campaigns|audience|overview|contacts|tags|fields|import|look|config|templates)(?:\/([A-Za-z0-9_-]+))?(?:\/(content|duplicate|schedule|unschedule|test|checklist|report|tags|unsubscribe))?$/;
 
-export function createEmailHub({ provider, brand = {}, store = null, now = () => Date.now() } = {}) {
+export function createEmailHub({ provider, brand = {}, store = null, now = () => Date.now(), schedule = {} } = {}) {
+  const rules = scheduleRules(schedule);
   assertProvider(provider);
   const caps = capabilitiesOf(provider);
   const need = (k) => { if (!caps[k]) throw new HubError('That is not something this email service can do from here.', 405); };
@@ -74,7 +75,7 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
     if (id && action === 'duplicate' && method === 'POST') return json(200, { campaign: await provider.duplicateCampaign(id) });
     if (id && action === 'schedule' && method === 'POST') {
       const b = await readBody(request);
-      const plan = planSchedule(b.sendAt, b.confirm, now());
+      const plan = planSchedule(b.sendAt, b.confirm, now(), rules);
       await draftOnly(id, 'schedule it again');
       if (caps.checklist) {
         const list = await provider.sendChecklist(id);
@@ -165,7 +166,7 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
     const [, area, id, sub] = m || [];
     const url = new URL(request.url);
     try {
-      if (area === 'config') return json(200, { label: provider.label, capabilities: caps, brand: { name: brand.name || '' }, appUrl: provider.appUrl('/'), unsubscribePage: brand.unsubscribePage || null });
+      if (area === 'config') return json(200, { label: provider.label, capabilities: caps, brand: { name: brand.name || '' }, appUrl: provider.appUrl('/'), unsubscribePage: brand.unsubscribePage || null, schedule: rules });
       // Logos and the archive do not need the service to be connected (the archive outlives it).
       if (isExtra) return (await extras(request, path, method)) || json(405, { error: 'That is not something we do.' });
       if (!provider.connected()) {
@@ -177,6 +178,7 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
       if (area === 'campaigns') return await campaigns(request, method, id, sub);
       if (area === 'contacts') return await contacts(request, url, method, id, sub);
       if (area === 'tags' && method === 'POST') { need('tags'); const n = clip((await readBody(request)).name, 100).trim(); if (!n) throw new HubError('Give the tag a name.'); return json(200, await provider.createTag(n)); }
+      if (area === 'templates' && method === 'GET') { need('templates'); return json(200, await provider.listTemplates()); }
       if (area === 'fields' && method === 'GET') { need('fields'); return json(200, await provider.fields()); }
       if (area === 'import' && method === 'POST') {
         need('import');

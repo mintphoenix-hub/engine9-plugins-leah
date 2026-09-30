@@ -18,7 +18,7 @@ import { tableNames, toSqlTime } from './helpers.js';
 import { HubError } from './provider.js';
 import { MAX_LOGO_BYTES, LOGO_TYPES, LOGO_FILE, sniffImage, cleanLogoName } from './logos.js';
 
-const COLUMNS = { ground: 'ground', card: 'card', border: 'border', accent: 'accent', text: 'text', muted: 'muted', link: 'link', logoUrl: 'logo_url', logoWidth: 'logo_width', footerLine: 'footer_line' };
+const COLUMNS = { ground: 'ground', card: 'card', border: 'border', accent: 'accent', text: 'text', muted: 'muted', link: 'link', logoUrl: 'logo_url', logoWidth: 'logo_width', footerLine: 'footer_line', font: 'font' };
 const num = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
 
 export function createD1Store({ db, images = null, publicLogoBase = '', builtIn = [], tablePrefix = '' } = {}) {
