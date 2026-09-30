@@ -309,7 +309,7 @@ export function mountEmailHub(root, options = {}) {
         <div id="eh-html-box" class="${st.bodyMode === 'html' ? '' : 'eh-hide'}"><div class="eh-field"><div class="eh-lab"><label for="eh-html">HTML of the whole email</label><span class="eh-count" id="eh-html-n"></span></div><textarea id="eh-html" rows="14" maxlength="200000" spellcheck="false" placeholder="&lt;html&gt; &hellip; &lt;/html&gt;" style="font-family:ui-monospace,Menlo,monospace;font-size:.85rem"></textarea><p class="eh-small eh-muted" style="margin:.4rem 0 0">It is sent exactly as pasted, so your logo, footer and postal address are <strong>not</strong> added. It must contain the unsubscribe tag <code>${esc(st.mergeTags?.unsubscribe || '')}</code> (as a link&rsquo;s address) or it will not save. Scripts, forms and frames are removed. Pictures need full https:// addresses.</p></div></div>
         <div id="eh-text-box" class="${st.bodyMode === 'html' ? 'eh-hide' : ''}"><div class="eh-field"><div class="eh-lab"><label for="eh-text">Message</label><span class="eh-count" id="eh-words"></span></div><textarea id="eh-text" rows="14" maxlength="20000" placeholder="Write it plainly.&#10;&#10;A blank line starts a new paragraph. Links like https://example.org work as they are.&#10;&#10;Your logo, footer and unsubscribe line are added for you."></textarea><p class="eh-small eh-muted" style="margin:.4rem 0 0">Want it designed, with pictures and buttons? Save the draft, then use &ldquo;Edit the design in ${esc(st.label)}&rdquo; on it. The logo, colours and footer are set under Content.</p></div></div>
         <div class="eh-field" style="margin:0;padding-top:1rem;border-top:1px solid var(--eh-rule)"><label for="eh-title">Name in ${esc(st.label)} <span class="eh-muted" style="text-transform:none;letter-spacing:0">(optional)</span></label><input id="eh-title" type="text" maxlength="100" autocomplete="off" placeholder="Defaults to the subject line"></div>`)}
-      <div class="eh-row"><button class="eh-btn" type="button" data-act="save-draft">Save draft to ${esc(st.label)}</button><button class="eh-btn eh-o" type="button" data-act="nav" data-page="campaigns">Cancel</button><span class="eh-small eh-muted">Nothing is sent. You schedule it from Campaigns, after a look.</span></div><p class="eh-msg" id="eh-msg" role="status" aria-live="polite"></p></div>
+      <div class="eh-row"><button class="eh-btn" type="button" data-act="save-draft">Save draft to ${esc(st.label)}</button>${st.caps.schedule !== false ? `<button class="eh-btn eh-o" type="button" data-act="save-draft-schedule">Save and schedule&hellip;</button>` : ''}<button class="eh-btn eh-o" type="button" data-act="nav" data-page="campaigns">Cancel</button><span class="eh-small eh-muted">Nothing is sent until you schedule it and tick that you have read the preview.</span></div><p class="eh-msg" id="eh-msg" role="status" aria-live="polite"></p></div>
       <aside class="eh-comp-r" aria-label="Preview"><div class="eh-tabs" role="tablist" aria-label="Preview as"><button type="button" class="eh-btn eh-o eh-s" role="tab" data-act="pv" data-pv="inbox" aria-selected="${st.pv === 'inbox'}">In the inbox</button><button type="button" class="eh-btn eh-o eh-s" role="tab" data-act="pv" data-pv="open" aria-selected="${st.pv === 'open'}">Opened</button></div>
         <div id="eh-pv-inbox" class="${st.pv === 'inbox' ? '' : 'eh-hide'}"><div class="eh-inbox"><div class="eh-inbox-top"><b><i aria-hidden="true"></i>${esc(brandName || 'Your name')}</b><span>now</span></div><p class="eh-inbox-sub" id="eh-pv-sub"></p><p class="eh-inbox-pre" id="eh-pv-pre"></p><p class="eh-inbox-note eh-hide" id="eh-pv-note">Dimmed text may be cut off on a phone.</p></div></div>
         <div id="eh-pv-open" class="eh-frame-box ${st.pv === 'open' ? '' : 'eh-hide'}"><div class="eh-frame-head"><small>FROM ${esc((brandName || 'you').toUpperCase())}</small><b id="eh-pv-fsub"></b></div><iframe id="eh-pv-frame" class="eh-frame" sandbox="allow-same-origin" title="Preview of the email"></iframe></div></aside></div>`;
@@ -345,14 +345,14 @@ export function mountEmailHub(root, options = {}) {
     el.value = clip(el.value.slice(0, a) + put + el.value.slice(b), cap); el.focus();
     const pos = a + put.length; try { el.setSelectionRange(pos, pos); } catch { /* not a text field */ } preview();
   }
-  async function saveDraft(btn) {
+  async function saveDraft(btn, thenSchedule = false) {
     const msg = $('#eh-msg'); btn.disabled = true; say(msg, `Saving to ${st.label}…`);
     try {
       const tpl = $('#eh-tpl')?.value, dflt = st.newTemplateId || st.tpls?.find((x) => x.isDefault)?.id || '';
       const d = await api('/campaigns', { method: 'POST', body: JSON.stringify({ subject: $('#eh-sub').value, previewText: $('#eh-pre').value, title: $('#eh-title').value, ...(st.bodyMode === 'html' ? { html: $('#eh-html').value } : { text: $('#eh-text').value }), to: $('#eh-to').value, ...(tpl && String(tpl) !== String(dflt) ? { templateId: tpl } : {}) }) });
       st.newTemplate = '';
       try { localStorage.removeItem(draftKey); } catch { /* nothing to clear */ }
-      st.filter = 'draft'; st.open = d.campaign.id; st.mode = null; st.page = 'campaigns'; st.sub = ''; renderNav();
+      st.filter = 'draft'; st.open = d.campaign.id; st.mode = thenSchedule ? 'schedule' : null; st.page = 'campaigns'; st.sub = ''; renderNav();
       await campaigns(); flash(`Saved as a draft in ${st.label}. Have a look, send yourself a test, then schedule it when you are happy.` + (d.warnings?.length ? ' Worth a look first: ' + d.warnings.join(' ') : ''));
     } catch (err) { say(msg, err.message, true); btn.disabled = false; }
   }
@@ -408,7 +408,7 @@ export function mountEmailHub(root, options = {}) {
         <div class="eh-field"><div class="eh-lab"><label for="ly-pre">Preview text</label></div><input id="ly-pre" type="text" maxlength="150" autocomplete="off" placeholder="The line after the subject in an inbox" value="${esc(c.preview || '')}"></div>
         <div class="eh-field" style="margin:0"><label for="ly-title">Name in ${esc(st.label)} <span class="eh-muted" style="text-transform:none;letter-spacing:0">(optional)</span></label><input id="ly-title" type="text" maxlength="100" autocomplete="off" value="${esc(c.title && c.title !== c.subject ? c.title : '')}"></div>`)}
       ${groups.map((g) => step(++n, esc(g.name), '', g.fields.map(input).join(''))).join('')}
-      <div class="eh-row"><button class="eh-btn" type="button" data-act="save-layout">${edit ? 'Save changes' : `Save draft to ${esc(st.label)}`}</button><button class="eh-btn eh-o" type="button" data-act="nav" data-page="campaigns">Cancel</button><span class="eh-small eh-muted">Nothing is sent. You schedule it from Campaigns, after a look.</span></div><p class="eh-msg" id="eh-msg" role="status" aria-live="polite"></p></div>
+      <div class="eh-row"><button class="eh-btn" type="button" data-act="save-layout">${edit ? 'Save changes' : `Save draft to ${esc(st.label)}`}</button><button class="eh-btn eh-o" type="button" data-act="save-layout-schedule">${edit ? 'Save and schedule&hellip;' : 'Save and schedule&hellip;'}</button><button class="eh-btn eh-o" type="button" data-act="nav" data-page="campaigns">Cancel</button><span class="eh-small eh-muted">Nothing is sent until you schedule it and tick that you have read the preview.</span></div><p class="eh-msg" id="eh-msg" role="status" aria-live="polite"></p></div>
       <aside class="eh-comp-r" aria-label="Preview"><div class="eh-frame-box"><div class="eh-frame-head"><small>FROM ${esc((brandName || 'you').toUpperCase())}</small><b id="ly-fsub"></b></div><iframe id="ly-frame" class="eh-frame" sandbox="allow-same-origin" title="Preview of the email"></iframe></div></aside></div>`;
     $('#ly-frame').addEventListener('load', () => { fit($('#ly-frame')); picturesNote($('#ly-frame')); });
     layoutPreview(true);
@@ -434,7 +434,7 @@ export function mountEmailHub(root, options = {}) {
     if (now) return run();
     st.lyT = setTimeout(run, 350);
   }
-  async function saveLayout(btn) {
+  async function saveLayout(btn, thenSchedule = false) {
     const msg = $('#eh-msg'), edit = st.lay.edit; btn.disabled = true; say(msg, `Saving to ${st.label}…`);
     try {
       const base = { subject: $('#ly-sub').value, previewText: $('#ly-pre').value, title: $('#ly-title').value };
@@ -443,7 +443,7 @@ export function mountEmailHub(root, options = {}) {
         : await api('/campaigns', { method: 'POST', body: JSON.stringify({ ...base, layout: st.lay.id, values: layoutValues(), to: $('#ly-to').value }) });
       const id = d.campaign?.id || edit?.id;
       const l = await api('/campaigns'); st.all = l.campaigns;
-      st.filter = 'draft'; st.open = id; st.mode = null; st.page = 'campaigns'; st.sub = ''; st.lay = null; renderNav();
+      st.filter = 'draft'; st.open = id; st.mode = thenSchedule ? 'schedule' : null; st.page = 'campaigns'; st.sub = ''; st.lay = null; renderNav();
       await campaigns(); flash(edit ? 'Saved. Have a look at the preview below.' : `Saved as a draft in ${st.label}. Have a look, send yourself a test, then schedule it when you are happy.`);
     } catch (err) { say(msg, err.message, true); btn.disabled = false; }
   }
@@ -606,12 +606,14 @@ export function mountEmailHub(root, options = {}) {
     if (a === 'tpl-use') { st.newTemplate = b.dataset.id; return go('campaigns', 'new'); }
     if (a === 'kind') return b.dataset.kind === 'text' ? compose() : composeLayout(b.dataset.kind);
     if (a === 'save-layout') return saveLayout(b);
+    if (a === 'save-layout-schedule') return saveLayout(b, true);
     if (a === 'edit-fields') return editFields(b.dataset.id).catch((err) => flash(err.message));
     if (a === 'mode-x') { st.mode = null; return draw(false); }
     if (a === 'emoji') return insert(b.textContent);
     if (a === 'emoji-toggle') { const open = b.getAttribute('aria-expanded') !== 'true'; b.setAttribute('aria-expanded', String(open)); $('#eh-emoji-tray').classList.toggle('eh-hide', !open); return; }
     if (a === 'pv') { st.pv = b.dataset.pv; root.querySelectorAll('[data-act="pv"]').forEach((x) => x.setAttribute('aria-selected', String(x === b))); $('#eh-pv-inbox').classList.toggle('eh-hide', st.pv !== 'inbox'); $('#eh-pv-open').classList.toggle('eh-hide', st.pv !== 'open'); return preview(); }
     if (a === 'save-draft') return saveDraft(b);
+    if (a === 'save-draft-schedule') return saveDraft(b, true);
     if (a === 'body-mode') { st.bodyMode = b.dataset.mode; root.querySelectorAll('[data-act="body-mode"]').forEach((x) => x.setAttribute('aria-selected', String(x === b))); $('#eh-html-box').classList.toggle('eh-hide', st.bodyMode !== 'html'); $('#eh-text-box').classList.toggle('eh-hide', st.bodyMode === 'html'); return preview(); }
     if (a === 'banner') return st.banner?.run?.();
     if (a === 'home-banner') return st.homeBanner?.run?.();

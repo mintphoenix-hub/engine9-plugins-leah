@@ -268,6 +268,7 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 
 ## Version history
 
+- **3.20.0**: Create has a "Save and schedule…" button beside "Save draft" (Write it and layouts alike): it saves the draft and opens its Schedule form straight away. Scheduling itself is unchanged: a draft, a time at least the lead time ahead, and a ticked "I have read the preview". UI only.
 - **3.19.2**: Removed the "Choose a template" popup (owner: not needed). Create goes straight to the Create page, where "Write it" and each layout (for example "New show") sit side by side at the top. The message-only template is still not listed and a host that fixes the design still shows no Design chooser.
 - **3.19.1**: Fix: the Choose a template popup's stylesheet had a stray character that stopped its first rule applying, so the popup drew in the page instead of over it.
 - **3.19.0**: Create opens a "Choose a template" popup: names and pictures of "Write it", each layout (with its sample) and, where the host does not fix the design, each of the service's templates. The template that only holds a message (`newTemplateId` / `layoutTemplateId`) is plumbing: `GET /templates` no longer lists it, and a host that fixes the design (`newTemplateId`) shows no Design chooser or "Change design". `GET /config` returns `layoutTemplateId`. No schema change.
