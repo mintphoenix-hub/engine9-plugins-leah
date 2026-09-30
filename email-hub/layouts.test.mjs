@@ -43,6 +43,13 @@ console.log('layouts');
   assert.throws(() => cleanValues(SHOW, { title: '' }), /needed/); ok('a required field must be filled');
   assert.throws(() => cleanValues(SHOW, { title: 'x', ticketUrl: 'http://tix.example' }), /https/); ok('a link must be https');
   assert.equal(cleanValues(SHOW, { title: '', ticketUrl: 'javascript:alert(1)' }, { partial: true }).ticketUrl, ''); ok('a half-filled form previews without complaint');
+  const PICS = { label: 'With a picture', fields: [{ key: 'title', label: 'Title', required: true }, { key: 'banner', label: 'Banner picture', type: 'image' }], render: () => '<html></html>' };
+  checkLayouts({ pics: PICS }); ok('a picture field is a valid field type');
+  assert.equal(cleanValues(PICS, { title: 'x', banner: 'https://cdn.example/a.jpg' }).banner, 'https://cdn.example/a.jpg'); ok('a picture address is kept');
+  assert.throws(() => cleanValues(PICS, { title: 'x', banner: 'http://cdn.example/a.jpg' }), /https/); ok('a picture must be https');
+  assert.equal(cleanValues(PICS, { title: 'x', banner: 'javascript:alert(1)' }, { partial: true }).banner, ''); ok('a script address is never kept as a picture');
+  assert.equal(cleanValues(PICS, { title: 'x', banner: 'data:image/png;base64,AAAA' }, { partial: true }).banner, ''); ok('an embedded picture is not accepted, only an address');
+  assert.equal(listLayouts({ pics: PICS })[0].fields[1].type, 'image'); ok('the screens are told a field is a picture');
   assert.ok(listLayouts({ show: SHOW })[0].fields.every((f) => !('render' in f)) && !('render' in listLayouts({ show: SHOW })[0])); ok('the screens are never given the render function');
   assert.deepEqual(listLayouts({ show: { ...SHOW, sample: { title: 'Sample' } } })[0].sample, { title: 'Sample' }); assert.equal(listLayouts({ show: SHOW })[0].sample, null); ok('a layout may carry a sample, for previewing it as a template');
 }

@@ -403,14 +403,17 @@ export function mountEmailHub(root, options = {}) {
   async function composeLayout(layoutId, edit = null) {
     await loadLayouts();
     const def = st.layouts.layouts.find((x) => x.id === layoutId); if (!def) return compose();
+    if (def.fields.some((f) => f.type === 'image' || (f.type === 'url' && /picture|image|photo|banner|poster/i.test(`${f.label} ${f.key}`)))) st.lib = await api('/look').catch(() => st.lib || null);   // the picture library, for picture fields
     st.lay = { id: layoutId, def, edit };
     const v = edit?.values || {}, c = edit?.campaign || {};
     const groups = [];
     for (const f of def.fields) { const name = f.group || 'Details'; let g = groups.find((x) => x.name === name); if (!g) groups.push(g = { name, fields: [] }); g.fields.push(f); }
     const opt = (f) => (f.required ? '' : ' <span class="eh-muted" style="text-transform:none;letter-spacing:0">(optional)</span>');
+    const picField = (f) => f.type === 'image' || (f.type === 'url' && /picture|image|photo|banner|poster/i.test(`${f.label} ${f.key}`));
+    const picBox = (f) => `<div class="eh-pic" data-pic="lf-${esc(f.key)}"><div class="eh-pic-cur eh-hide"><img alt=""><span class="eh-small eh-muted">The picture now in this email</span></div><div class="eh-row" style="margin-top:.5rem"><button type="button" class="eh-btn eh-o eh-s" data-act="pic-open" data-for="lf-${esc(f.key)}">Choose from the picture library</button>${st.lib?.canUpload ? `<label class="eh-btn eh-o eh-s" style="cursor:pointer"><span>Upload a new picture</span><input type="file" class="eh-sr" data-picup="lf-${esc(f.key)}" accept="${esc((st.lib.upload?.types || ['image/png', 'image/jpeg']).join(','))}"></label>` : ''}</div><div class="eh-pic-grid eh-hide" role="group" aria-label="Picture library"></div><p class="eh-small eh-muted" data-picmsg role="status" aria-live="polite" style="margin:.4rem 0 0"></p></div>`;
     const input = (f) => `<div class="eh-field"><div class="eh-lab"><label for="lf-${esc(f.key)}">${esc(f.label)}${opt(f)}</label></div>${f.type === 'longtext'
       ? `<textarea id="lf-${esc(f.key)}" rows="6" placeholder="${esc(f.placeholder)}">${esc(v[f.key] ?? '')}</textarea>`
-      : `<input id="lf-${esc(f.key)}" type="${f.type === 'url' ? 'url' : 'text'}" autocomplete="off" placeholder="${esc(f.placeholder)}" value="${esc(v[f.key] ?? '')}">`}${f.hint || f.type === 'url' ? `<p class="eh-small eh-muted" style="margin:.3rem 0 0">${esc(f.hint || 'Paste the full web address, starting with https://')}</p>` : ''}</div>`;
+      : `<input id="lf-${esc(f.key)}" type="${f.type === 'url' ? 'url' : 'text'}" autocomplete="off" placeholder="${esc(f.placeholder)}" value="${esc(v[f.key] ?? '')}">`}${f.hint || f.type === 'url' ? `<p class="eh-small eh-muted" style="margin:.3rem 0 0">${esc(f.hint || (picField(f) ? 'Choose a picture below, or paste its full web address, starting with https://' : 'Paste the full web address, starting with https://'))}</p>` : ''}${picField(f) ? picBox(f) : ''}</div>`;
     let n = 0;
     const lead = edit?.copied ? 'This is a copy, with every field already filled in. Change what is different, then save.' : edit ? 'Change any field. The design stays the same.' : (def.description || 'Fill in the details. The design is always the same.');
     const sourceBox = def.source ? `<div class="eh-box" id="src-box" style="margin:0 0 1rem"><div class="eh-field"><label for="src-sel">${esc(def.source.label)}</label><select id="src-sel"><option value="">Loading&hellip;</option></select></div><div class="eh-row"><button class="eh-btn eh-s" type="button" data-act="src-fill">Fill empty fields</button><button class="eh-btn eh-o eh-s" type="button" data-act="src-replace">Replace all fields</button></div><p class="eh-small eh-muted" id="src-msg" role="status" aria-live="polite" style="margin:.5rem 0 0">A suggestion to start from. Nothing is saved until you press Save, so read every line first.</p></div>` : '';
@@ -424,7 +427,7 @@ export function mountEmailHub(root, options = {}) {
       <div class="eh-row"><button class="eh-btn" type="button" data-act="save-layout">${edit ? 'Save changes' : `Save draft to ${esc(st.label)}`}</button><button class="eh-btn eh-o" type="button" data-act="save-layout-schedule">${edit ? 'Save and schedule&hellip;' : 'Save and schedule&hellip;'}</button><button class="eh-btn eh-o" type="button" data-act="nav" data-page="campaigns">Cancel</button><span class="eh-small eh-muted">Nothing is sent until you schedule it and tick that you have read the preview.</span></div><p class="eh-msg" id="eh-msg" role="status" aria-live="polite"></p></div>
       <aside class="eh-comp-r" aria-label="Preview"><div class="eh-frame-box"><div class="eh-frame-head"><small>FROM ${esc((brandName || 'you').toUpperCase())}</small><b id="ly-fsub"></b></div><iframe id="ly-frame" class="eh-frame" sandbox="allow-same-origin" title="Preview of the email"></iframe></div></aside></div>`;
     $('#ly-frame').addEventListener('load', () => { fit($('#ly-frame')); picturesNote($('#ly-frame')); });
-    layoutPreview(true);
+    layoutPreview(true); syncPics();
     if (def.source) {                                   // the choices for "pull copy from ..."
       api(`/layouts/${layoutId}/source`).then((d) => { const sel = $('#src-sel'); if (sel) sel.innerHTML = '<option value="">Choose one&hellip;</option>' + (d.items || []).map((i) => `<option value="${esc(i.id)}">${esc(i.label)}${i.note ? ' (' + esc(i.note) + ')' : ''}</option>`).join(''); })
         .catch(() => { const m = $('#src-msg'); if (m) say(m, 'The suggestions could not be loaded just now.', true); });
@@ -434,6 +437,33 @@ export function mountEmailHub(root, options = {}) {
     if (!$('#ly-to') || !a || a.connected === false) return;
     st.audience = a; const o = (val, name, k) => `<option value="${val}" data-n="${k ?? ''}">${esc(name)}${k != null ? ` (${k})` : ''}</option>`;
     $('#ly-to').innerHTML = o('', 'Everyone on your list', a.subscribers) + (a.tags?.length ? `<optgroup label="A tag">${a.tags.map((t) => o('t:' + t.id, t.name, t.count)).join('')}</optgroup>` : '') + (a.segments?.length ? `<optgroup label="A saved group">${a.segments.map((t) => o('s:' + t.id, t.name, t.count)).join('')}</optgroup>` : '');
+  }
+  /* Picture fields: show the picture now in the box, and list the library when asked. */
+  const libPics = () => (st.lib?.logos || []).filter((p) => !p.builtin && p.url);
+  function syncPics() {
+    root.querySelectorAll('.eh-pic').forEach((box) => {
+      const el = $('#' + box.dataset.pic), cur = box.querySelector('.eh-pic-cur'), v = (el?.value || '').trim();
+      const ok = /^https:\/\/[^\s"'<>]+$/i.test(v);
+      cur.classList.toggle('eh-hide', !ok); if (ok) cur.querySelector('img').src = v;
+    });
+  }
+  function drawPicGrid(box) {
+    const grid = box.querySelector('.eh-pic-grid'), list = libPics(), cur = ($('#' + box.dataset.pic)?.value || '').trim();
+    grid.innerHTML = list.length
+      ? list.map((p) => `<button type="button" class="eh-pic-item" data-act="pic-use" data-for="${esc(box.dataset.pic)}" data-url="${esc(p.url)}" aria-pressed="${p.url === cur}" title="${esc(p.name)}"><img src="${esc(p.preview || p.url)}" alt="" loading="lazy"><span>${esc(p.name)}</span></button>`).join('')
+      : '<p class="eh-small eh-muted" style="margin:0">Nothing in the picture library yet. Upload a picture, or paste an address above.</p>';
+  }
+  async function uploadPic(input) {
+    const box = input.closest('.eh-pic'), f = input.files?.[0], m = box.querySelector('[data-picmsg]'), t = input.previousElementSibling; input.value = ''; if (!f) return;
+    const max = st.lib?.upload?.maxBytes || 2_000_000; if (f.size > max) { say(m, `That picture is over ${Math.round(max / 1e5) / 10} MB.`, true); return; }
+    const label = t?.textContent; if (t) t.textContent = 'Uploading…'; const fd = new FormData(); fd.append('file', f); fd.append('name', f.name);
+    try {
+      const res = await doFetch(base + '/look/logos', { method: 'POST', credentials: 'same-origin', body: fd }); const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'That did not go through.');
+      st.lib = await api('/look').catch(() => st.lib);                                        // the library now has it
+      const el = $('#' + box.dataset.pic); el.value = body.logo.url; el.dispatchEvent(new Event('input', { bubbles: true })); syncPics();
+      say(m, 'Uploaded and saved in the picture library. It is now the picture in this email.');
+    } catch (err) { say(m, err.message, true); } finally { if (t) t.textContent = label; }
   }
   /* The whole email, made by the host's layout on the server from what is typed so far. */
   function layoutPreview(now = false) {
@@ -603,7 +633,7 @@ export function mountEmailHub(root, options = {}) {
         const all = a === 'src-replace'; let n = 0;
         for (const [k, v] of Object.entries(d.values || {})) { const el = $('#lf-' + k); if (el && v && (all || !el.value.trim())) { el.value = v; n++; } }
         for (const [id, v] of [['ly-sub', d.subject], ['ly-pre', d.previewText]]) { const el = $('#' + id); if (el && v && (all || !el.value.trim())) { el.value = v; n++; } }
-        layoutPreview(true);
+        syncPics(); layoutPreview(true);
         say(msg, n ? `Filled ${n} ${n === 1 ? 'field' : 'fields'}. Read every line and change what needs it; nothing is saved until you press Save.` : 'Nothing to fill: those fields already have words. Use "Replace all fields" to overwrite them.');
       } catch (err) { say(msg, err.message, true); }
     })();
@@ -625,6 +655,8 @@ export function mountEmailHub(root, options = {}) {
     if (a === 'emoji') return insert(b.textContent);
     if (a === 'emoji-toggle') { const open = b.getAttribute('aria-expanded') !== 'true'; b.setAttribute('aria-expanded', String(open)); $('#eh-emoji-tray').classList.toggle('eh-hide', !open); return; }
     if (a === 'pv') { st.pv = b.dataset.pv; root.querySelectorAll('[data-act="pv"]').forEach((x) => x.setAttribute('aria-selected', String(x === b))); $('#eh-pv-inbox').classList.toggle('eh-hide', st.pv !== 'inbox'); $('#eh-pv-open').classList.toggle('eh-hide', st.pv !== 'open'); return preview(); }
+    if (a === 'pic-open') { const box = b.closest('.eh-pic'), grid = box.querySelector('.eh-pic-grid'); if (grid.classList.contains('eh-hide')) drawPicGrid(box); grid.classList.toggle('eh-hide'); return; }
+    if (a === 'pic-use') { const el = $('#' + b.dataset.for); el.value = b.dataset.url; el.dispatchEvent(new Event('input', { bubbles: true })); b.closest('.eh-pic-grid').classList.add('eh-hide'); syncPics(); return; }
     if (a === 'save-draft') return saveDraft(b);
     if (a === 'save-draft-schedule') return saveDraft(b, true);
     if (a === 'body-mode') { st.bodyMode = b.dataset.mode; root.querySelectorAll('[data-act=kind]').forEach((x) => x.setAttribute('aria-selected', String(x.dataset.kind === (st.bodyMode === 'html' ? 'html' : 'text')))); root.querySelectorAll('[data-act="body-mode"]').forEach((x) => x.setAttribute('aria-selected', String(x === b))); $('#eh-html-box').classList.toggle('eh-hide', st.bodyMode !== 'html'); $('#eh-text-box').classList.toggle('eh-hide', st.bodyMode === 'html'); return preview(); }
@@ -677,7 +709,7 @@ export function mountEmailHub(root, options = {}) {
   root.addEventListener('input', (e) => {
     const id = e.target.id;
     if (['eh-sub', 'eh-pre', 'eh-title', 'eh-text', 'eh-html'].includes(id)) return preview();
-    if (id && (id.startsWith('lf-') || id === 'ly-sub')) return layoutPreview();
+    if (id && (id.startsWith('lf-') || id === 'ly-sub')) { syncPics(); return layoutPreview(); }
     if (id === 'eh-q') { st.q = e.target.value; return draw(false); }
     if (id === 'eh-when' || id === 'eh-ok') { const at = whenAt($('#eh-when').value), ok = Number.isFinite(at) && at >= Date.now() + st.sched.leadMinutes * 60000; $('#eh-when-note').textContent = Number.isFinite(at) ? (ok ? `It will go out ${when(new Date(at).toISOString())}.` : `Choose a time at least ${st.sched.leadMinutes} minutes from now.`) : ''; $('#eh-sched').disabled = !(ok && $('#eh-ok').checked); return; }
     if (id === 'lk-w') { st.lookDraft.logoWidth = Number(e.target.value); $('#lk-wn').textContent = e.target.value; return lookPreview(); }
@@ -693,6 +725,7 @@ export function mountEmailHub(root, options = {}) {
     if (id === 'eh-when' || id === 'eh-ok') return e.target.dispatchEvent(new Event('input', { bubbles: true }));
     if (id === 'eh-to') { const o = e.target.selectedOptions[0]; $('#eh-to-n').textContent = String(e.target.value).startsWith('s:') ? `${st.label} works out who is in this group at the moment it sends.` : o?.dataset.n ? `About ${Number(o.dataset.n).toLocaleString(locale)} ${Number(o.dataset.n) === 1 ? 'person' : 'people'} will get this.` : ''; return preview(); }
     if (id === 'eh-ptag') { Object.assign(st.ppl, { tag: e.target.value, email: '', after: '', stack: [], open: null }); return contacts(false); }
+    if (e.target.dataset?.picup) return uploadPic(e.target);
     if (id === 'lk-up') {
       const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; const t = $('#lk-up-t'), m = $('#lk-m');
       const max = st.look?.upload?.maxBytes || 2_000_000; if (f.size > max) { say(m, `That picture is over ${Math.round(max / 1e5) / 10} MB.`, true); return; }

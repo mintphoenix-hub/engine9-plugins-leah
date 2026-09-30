@@ -195,6 +195,14 @@ createEmailHub({ provider, store, layouts: { show: {
 - **Duplicate keeps the template**: the Kit adapter now copies the original's `email_template_id`, so a copy is sent in the same
   design as the original (it used to fall back to the account's default template).
 
+### Picture fields
+
+A layout field with `type: 'image'` (its value is the picture's https address) shows, under the address box, a thumbnail of the picture in it,
+**Choose from the picture library** and, when the host's store can take uploads (`canUpload`), **Upload a new picture**. An upload goes to the
+same place as a logo (`POST /look/logos`), so it is saved in the host's library and can be chosen again next time; the size and file types are the
+host's (`upload.maxBytes`, `upload.types`). A `url` field whose label or key contains picture, image, photo, banner or poster is treated the
+same way without any change to the layout. The address is still checked as https on the server.
+
 ## Choosing and previewing a template
 
 A service's templates are its own designs. The hub lists them (Content), lets a person **pick one when creating an email** (a
@@ -281,6 +289,7 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 
 ## Version history
 
+- **3.23.0**: Picture fields. A layout field of `type: 'image'` (or a `url` field whose label or key says picture, image, photo, banner or poster) gets **Choose from the picture library**, **Upload a new picture** and a thumbnail of the picture now in the box, under its normal address box. The library is the host's own (`GET /look` `logos`, uploads through `POST /look/logos`, so a picture uploaded here is saved in the same library as the logos), the built-in logo is left out, and an address can still be pasted. Uploading only shows when the host's store can take uploads. Additive; no schema change.
 - **3.21.1**: Fix: web address fields (a layout's link or picture address) had no style, so they drew as bare text and did not look like something to click into; they now look like every other field. Web-address fields with no hint of their own say what to paste. `ui.test.mjs` fails if a field type used by the screens has no style.
 - **3.22.0**: "Paste HTML" is a tab beside "Write it" and the layouts at the top of Create (on a host that offers layouts), so pasting a finished email as HTML is one click, not a mode inside Write it. Same checks as before: scripts and frames are removed, the email must carry the unsubscribe tag, the address is warned about. UI only.
 - **3.21.0**: Duplicate opens the Create screen filled in (subject, preview, name, words) for emails the hub wrote from plain words. `GET /campaigns/:id/source`; `textFromBodyHtml`. Layout emails and service-made designs are copied in place as before. Additive; no schema change.

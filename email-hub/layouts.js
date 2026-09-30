@@ -20,7 +20,7 @@
 import { HubError } from './provider.js';
 import { checkEmailHtml } from './pasted.js';
 
-const LIMITS = { text: 300, longtext: 8000, url: 600 };
+const LIMITS = { text: 300, longtext: 8000, url: 600, image: 600 };   // image: the https address of a picture, chosen from the library or uploaded to it
 const KEY = /^[a-z][a-zA-Z0-9]{0,39}$/;
 const ID = /^[a-z][a-z0-9-]{0,29}$/;
 
@@ -57,7 +57,7 @@ export function cleanValues(layout, input, { partial = false } = {}) {
     const type = f.type || 'text';
     let v = src[f.key] == null ? '' : String(src[f.key]).replace(/\u0000/g, '');
     v = type === 'longtext' ? v.replace(/\r\n?/g, '\n').slice(0, LIMITS.longtext).trim() : v.replace(/\s+/g, ' ').slice(0, LIMITS[type]).trim();
-    if (type === 'url' && v && !isHttps(v)) { if (partial) v = ''; else throw new HubError(`${f.label || f.key}: use a full https:// address.`); }
+    if ((type === 'url' || type === 'image') && v && !isHttps(v)) { if (partial) v = ''; else throw new HubError(`${f.label || f.key}: use a full https:// address.`); }
     if (f.required && !v && !partial) throw new HubError(`${f.label || f.key} is needed.`);
     out[f.key] = v;
   }
