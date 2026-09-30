@@ -117,6 +117,24 @@ const hub = createEmailHub({ provider, brand, store, people: createCorePeople({ 
 - An address is matched the way core matches it: trimmed and lower-cased, by its text and by `email_hash_v1` (the sha256 of that). A name goes on `person`, never on the address. Everyone is a `person`.
 - Not covered: the service's own bounce and complaint states are not copied to core, and the audience itself is not imported into core's people (it lives in the service). With no `people` the hub is unchanged.
 
+## Showing the designed email in a draft's review
+
+Some services keep an email's design in a template of their own and add it only when they send (Kit does). Their API returns
+the message text but never the template, so a review of the draft would show a few bare lines. Give the hub a copy of the
+template (`templates.js`) and it drops the draft's message into it, as the service will:
+
+```js
+createEmailHub({ provider, templates: { 'Cluelesque announcement': '<html>…{{ message_content }}…</html>' }, defaultTemplate: 'House style' });
+```
+
+- The provider says which template an email uses (`campaignContent().template`, a name; the Kit adapter reads it from the
+  broadcast). `defaultTemplate` covers a service that does not, or an email on the account default. Names match ignoring case.
+- The merge tags `message_content`, `address`, `subscriber.email_address`, `subscriber_preferences_url` and `unsubscribe_url`
+  are filled (the last two as `#` and an example address); anything else is left empty, never shown as raw braces.
+- `GET /campaigns/:id/content` then returns `designed` beside `html`, and the review shows it in the frame. Without a copy the
+  review shows the message text with a note pointing at the service's own preview and the test email.
+- It is a preview from a copy the host keeps in step with the service; the service's preview or a test email has the last word.
+
 ## Options a host may set
 
 Everything below is optional and defaults to the neutral behavior, so a site that sets none of it is unchanged.
@@ -168,6 +186,7 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 
 ## Version history
 
+- **3.12.0**: `templates` and `defaultTemplate` options (`templates.js`): a draft's review shows the designed email by dropping its message into a copy of the service's template. `campaignContent()` may return `template` (a name); the Kit adapter does. Additive; no schema change.
 - **3.11.4**: A draft's review shows a note when the provider's copy is only the message text (Kit keeps the design in its template, which its API cannot return), and drafts get a "Preview the full design in Kit" button that opens that draft in Kit. No schema change.
 - **3.11.1**: Fix: the logo in every email carried another site's name as its alt text (a hard-coded string in `shell.js`); it is now the host's `brand.name`, escaped, and empty when the host sets none. Test fixtures carry no host names or addresses.
 - **3.11.0**: Connection to engine9 core's people (`people.js`, `createCorePeople`, `createEmailHub({ people })`): an unsubscribe on the host's page or on a contact, and a contact added with the consent tick, are also recorded in `person` / `person_email` after the service accepts them, by core's own rules (every matching address, never creating a row for an unsubscribe, never putting back Unsubscribed, Bouncing or Spam). The plugin now declares `@engine9/interfaces/person` in `metadata.dependencies`, so core installs it alongside; `core.test.mjs` therefore checks it by compile and schema, as it does the board. Additive and off by default.

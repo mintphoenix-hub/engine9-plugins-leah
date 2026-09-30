@@ -222,7 +222,7 @@ export function mountEmailHub(root, options = {}) {
     const f = root.querySelector(`[data-frame="${id}"]`); if (!f) return;
     f.addEventListener('load', () => fit(f));
     const own = findEmail(id);
-    try { const d = await api(own?.archive ? `/archive/${own.source}/${own.sourceId}/content` : `/campaigns/${id}/content`); f.srcdoc = d.html || '<p style="font-family:sans-serif;padding:1rem">No content yet.</p>'; const bare = !own?.archive && d.html && !/background|bgcolor/i.test(d.html); const box = f.closest('.eh-frame-box'); if (box && !box.querySelector('.eh-bare')) box.insertAdjacentHTML('beforeend', bare ? `<p class="eh-bare eh-small eh-muted" style="padding:.6rem .8rem;margin:0">This is the message text only. The full designed email can be previewed on ${esc(st.label)} or via test email.</p>` : ''); }
+    try { const d = await api(own?.archive ? `/archive/${own.source}/${own.sourceId}/content` : `/campaigns/${id}/content`); f.srcdoc = d.designed || d.html || '<p style="font-family:sans-serif;padding:1rem">No content yet.</p>'; const bare = !own?.archive && !d.designed && d.html && !/background|bgcolor/i.test(d.html); const box = f.closest('.eh-frame-box'); if (box && !box.querySelector('.eh-bare')) box.insertAdjacentHTML('beforeend', bare ? `<p class="eh-bare eh-small eh-muted" style="padding:.6rem .8rem;margin:0">This is the message text only. The full designed email can be previewed on ${esc(st.label)} or via test email.</p>` : ''); }
     catch (err) { f.srcdoc = `<p style="font-family:sans-serif;padding:1rem">${esc(err.message)}</p>`; }
     const c = findEmail(id); if (!c || kindOf(c) !== 'draft' || !st.caps.checklist) return;
     try { const r = await api(`/campaigns/${id}/checklist`); const el = $('#eh-ready'); if (!el) return;

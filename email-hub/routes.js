@@ -8,6 +8,7 @@
   The host owns sign-in, the provider's key, and where the look is stored (`store`). The hub owns the rules:
   scheduling is guarded (schedule.js), only a draft can change or go, and a test send goes only to the addresses given.
 */
+import { pickTemplate, renderTemplate } from './templates.js';
 import { assertProvider, capabilitiesOf, HubError } from './provider.js';
 import { planSchedule, isDraft, scheduleRules } from './schedule.js';
 import { bodyHtml, checkStyle, defaultStyle, StyleError } from './shell.js';
@@ -28,7 +29,7 @@ export function parseTo(to) {
 
 const ROUTE = /^\/(campaigns|audience|overview|contacts|tags|fields|import|look|config|templates)(?:\/([A-Za-z0-9_-]+))?(?:\/(content|duplicate|schedule|unschedule|test|checklist|report|tags|unsubscribe))?$/;
 
-export function createEmailHub({ provider, brand = {}, store = null, now = () => Date.now(), schedule = {}, people = null } = {}) {
+export function createEmailHub({ provider, brand = {}, store = null, now = () => Date.now(), schedule = {}, people = null, templates = null, defaultTemplate = '' } = {}) {
   const rules = scheduleRules(schedule);
   assertProvider(provider);
   const caps = capabilitiesOf(provider);
@@ -70,7 +71,13 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
       }
       if (method === 'DELETE') { const c = await draftOnly(id, 'delete it'); await provider.deleteCampaign(id); return json(200, { ok: true, id: c.id }); }
     }
-    if (id && action === 'content' && method === 'GET') return json(200, await provider.campaignContent(id));
+    if (id && action === 'content' && method === 'GET') {
+      const c = await provider.campaignContent(id);
+      const t = pickTemplate(templates, c.template, defaultTemplate);
+      if (!t || !c.html) return json(200, c);
+      const style = await loadStyle();
+      return json(200, { ...c, template: t.name, designed: renderTemplate(t.html, { message: c.html, address: style.address || brand.address || '' }) });
+    }
     if (id && action === 'report' && method === 'GET') { need('report'); return json(200, await provider.campaignReport(id)); }
     if (id && action === 'checklist' && method === 'GET') { need('checklist'); return json(200, await provider.sendChecklist(id)); }
     if (id && action === 'duplicate' && method === 'POST') return json(200, { campaign: await provider.duplicateCampaign(id) });

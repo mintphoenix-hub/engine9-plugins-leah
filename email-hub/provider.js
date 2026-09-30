@@ -12,7 +12,7 @@
     appUrl(path)                a link into the service's own website, for "Open in ..."
     listCampaigns()             { campaigns: [Campaign], dc? }
     getCampaign(id)             Campaign, freshly read
-    campaignContent(id)         { html }
+    campaignContent(id)         { html, template? }   template: the name of the service-side template the email is sent in, when it has one
     createCampaign(input)       Campaign      input: { subject, previewText, title, html, to: { tagId?, segmentId? } }
     updateCampaign(id, fields)  Campaign      fields: { subject?, previewText?, title? }
     deleteCampaign(id)          {}

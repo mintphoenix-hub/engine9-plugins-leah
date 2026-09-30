@@ -13,6 +13,7 @@ import * as unsubscribe from './unsubscribe.js';
 import * as routes from './routes.js';
 import * as store from './store.js';
 import * as people from './people.js';
+import * as templates from './templates.js';
 import * as adapters from './adapters/index.js';
 
 const metadata = {
@@ -24,10 +25,11 @@ const metadata = {
   schemas: ['schema.js']
 };
 
-export { metadata, schema, settings, helpers, provider, contract, shell, schedule, csv, stats, time, logos, unsubscribe, routes, store, people, adapters };
+export { metadata, schema, settings, helpers, provider, contract, shell, schedule, csv, stats, time, logos, unsubscribe, routes, store, people, templates, adapters };
 export * from './helpers.js';
 export * from './provider.js';
 export * from './contract.js';
+export * from './templates.js';
 export * from './shell.js';
 export * from './schedule.js';
 export * from './csv.js';

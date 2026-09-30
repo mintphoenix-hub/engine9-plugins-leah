@@ -153,7 +153,7 @@ export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, 
       const st = b.status === 'completed' || b.status === 'sending' ? statsOf(await kit(`/broadcasts/${id(cid)}/stats`).catch(() => null)) : null;
       return shape(b, st);
     }),
-    campaignContent: guard(async (cid) => ({ html: (await kit(`/broadcasts/${id(cid)}`))?.broadcast?.content || '', text: '' })),
+    campaignContent: guard(async (cid) => { const b = (await kit(`/broadcasts/${id(cid)}`))?.broadcast; return { html: b?.content || '', text: '', template: b?.email_template?.name || null }; }),
     campaignReport: guard(async (cid) => {
       const s = statsOf(await kit(`/broadcasts/${id(cid)}/stats`));
       return { recipients: s.recipients, opened: s.opened, openRate: s.openRate, clicked: s.clicked, clickRate: s.clickRate, unsubscribed: s.unsubscribes, bounced: null };
