@@ -121,3 +121,8 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 ## Following engine9 core
 
 `core-tested.json` records the core commit this package was last tested against, and `.github/workflows/core-updates.yml` checks for a newer one every six hours. See [AGENTS.md](../AGENTS.md#keeping-up-with-core).
+
+## Version history
+
+- **3.7.1**: The Audience choices (All contacts, Tags, Segments, Fields, Import contacts) are a submenu under Audience in the left nav. One corner size (`--eh-radius`, 10px) for buttons, nav, tabs, tiles, cards, fields and tags. `core-updates` ignores any lockfile and records the core commit npm really installed; interfaces are taken from their repository like core. No table, setting or export changed.
+- **3.7.0**: First release. Provider contract with Mailchimp, Kit and in-memory adapters; `createEmailHub`; the browser screens; the look of the emails with an optional postal address and logo uploads; the unsubscribe-through-your-own-website flow; the `core-updates` workflow.
