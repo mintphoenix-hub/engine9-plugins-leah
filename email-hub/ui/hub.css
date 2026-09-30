@@ -9,7 +9,7 @@
     --eh-alt       one second colour: drafts, Create   --eh-on-alt     text on the second colour
     --eh-danger    destructive actions                 --eh-font, --eh-radius
 */
-.eh{--eh-page:#F5F9F8;--eh-panel:#FFFFFF;--eh-panel-2:#EDF3F1;--eh-ink:#1B3834;--eh-soft:#4F6663;--eh-rule:rgba(30,60,56,.16);--eh-accent:#274F49;--eh-on-accent:#FFFFFF;--eh-accent-tint:#E1EEEA;--eh-alt:#6F58A3;--eh-on-alt:#FFFFFF;--eh-alt-tint:#EDE8F6;--eh-danger:#B04A4A;--eh-font:inherit;--eh-radius:4px;
+.eh{--eh-page:#F5F9F8;--eh-panel:#FFFFFF;--eh-panel-2:#EDF3F1;--eh-ink:#1B3834;--eh-soft:#4F6663;--eh-rule:rgba(30,60,56,.16);--eh-accent:#274F49;--eh-on-accent:#FFFFFF;--eh-accent-tint:#E1EEEA;--eh-alt:#6F58A3;--eh-on-alt:#FFFFFF;--eh-alt-tint:#EDE8F6;--eh-danger:#B04A4A;--eh-font:inherit;--eh-radius:10px;
   font-family:var(--eh-font);color:var(--eh-ink);line-height:1.5;box-sizing:border-box}
 .eh *,.eh *::before,.eh *::after{box-sizing:inherit}
 :where(.eh) button,:where(.eh) input,:where(.eh) select,:where(.eh) textarea{font:inherit;color:inherit}
@@ -22,21 +22,26 @@
 .eh-hub{display:grid;grid-template-columns:12.5rem minmax(0,1fr);gap:1.6rem 2.2rem;align-items:start}
 .eh-nav{position:sticky;top:1rem}
 .eh-nav ul{display:grid;gap:.15rem;margin-top:1rem}
-.eh-nav li button{display:flex;gap:.7rem;align-items:center;width:100%;min-height:2.7rem;padding:0 .8rem;background:none;border:0;border-left:3px solid transparent;border-radius:0;color:var(--eh-soft);text-align:left;cursor:pointer;transition:background .15s,color .15s}
+.eh-nav li button{display:flex;gap:.7rem;align-items:center;width:100%;min-height:2.7rem;padding:0 .8rem;background:none;border:0;border-radius:var(--eh-radius);color:var(--eh-soft);text-align:left;cursor:pointer;transition:background .15s,color .15s}
 .eh-nav li button svg{flex:none}
 .eh-nav li button:hover{background:var(--eh-accent-tint);color:var(--eh-accent)}
-.eh-nav li button[aria-current="true"]{background:var(--eh-accent);color:var(--eh-on-accent);border-left-color:var(--eh-accent)}
+.eh-nav li button[aria-current="true"]{background:var(--eh-accent);color:var(--eh-on-accent)}
+.eh-sub{margin:.1rem 0 .5rem 1.5rem;padding:0 0 0 .5rem;border-left:1px solid var(--eh-rule);display:grid;gap:.05rem}
+.eh-nav .eh-sub li button{min-height:2.2rem;padding:0 .7rem;font-size:.9rem;border-left:0;border-radius:var(--eh-radius)}
+.eh-nav .eh-sub li button[aria-current="true"]{background:var(--eh-accent-tint);color:var(--eh-accent);font-weight:500}
 .eh-main{min-width:0}
 @media(max-width:820px){
   .eh-hub{grid-template-columns:minmax(0,1fr)}
   .eh-nav{position:static}
   .eh-nav ul{display:flex;overflow-x:auto;gap:.3rem;margin-top:.7rem;padding-bottom:.3rem}
-  .eh-nav li{flex:none}.eh-nav li button{white-space:nowrap;border-left:0;border-bottom:3px solid transparent}
-  .eh-nav li button[aria-current="true"]{border-bottom-color:var(--eh-accent)}
+  .eh-nav li{flex:none;display:flex;align-items:center;gap:.3rem}.eh-nav li button{white-space:nowrap}
+  .eh-nav ul{flex-wrap:wrap;overflow:visible}
+  .eh-nav li:has(.eh-sub){flex-basis:100%;flex-wrap:wrap}
+  .eh-sub{flex-basis:100%;margin:0;padding:0 0 0 1.4rem;border-left:0;display:flex;flex-wrap:wrap;gap:.2rem}.eh-nav .eh-sub li button{min-height:2.4rem}
 }
 
 /* buttons */
-.eh-btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1.5rem;background:var(--eh-accent);border:1px solid var(--eh-accent);border-radius:999px;color:var(--eh-on-accent);font-size:.74rem;letter-spacing:.14em;text-transform:uppercase;text-decoration:none;cursor:pointer;transition:filter .15s,transform .15s}
+.eh-btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1.5rem;background:var(--eh-accent);border:1px solid var(--eh-accent);border-radius:var(--eh-radius);color:var(--eh-on-accent);font-size:.74rem;letter-spacing:.14em;text-transform:uppercase;text-decoration:none;cursor:pointer;transition:filter .15s,transform .15s}
 .eh-btn:hover{filter:brightness(1.12)}
 .eh-btn:disabled{opacity:.5;cursor:default;filter:none}
 .eh-btn.eh-o{background:transparent;color:var(--eh-ink);border-color:var(--eh-rule)}
@@ -96,9 +101,8 @@
 .eh-tile:nth-child(2)[aria-selected="true"] b,.eh-tile:nth-child(2)[aria-selected="true"] span,.eh-tile:nth-child(2)[aria-selected="true"] small{color:var(--eh-on-alt)}
 .eh-tabs{display:flex;flex-wrap:wrap;gap:.5rem;margin:0 0 1.2rem}
 .eh-tabs .eh-btn[aria-selected="true"]{background:var(--eh-accent);border-color:var(--eh-accent);color:var(--eh-on-accent)}
-.eh-tabs .eh-btn{border-radius:var(--eh-tab-radius,10px)}
 @media(max-width:820px){.eh-tabs{flex-wrap:nowrap;overflow-x:auto;padding-bottom:.3rem;scrollbar-width:thin}.eh-tabs .eh-btn{flex:none;white-space:nowrap}}
-.eh-tag{display:inline-block;font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;padding:.3em .8em;border-radius:99px;border:1px solid var(--eh-accent);color:var(--eh-accent);white-space:nowrap}
+.eh-tag{display:inline-block;font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;padding:.3em .8em;border-radius:var(--eh-radius);border:1px solid var(--eh-accent);color:var(--eh-accent);white-space:nowrap}
 .eh-tag.sent,.eh-tag.subscribed{background:var(--eh-accent);color:var(--eh-on-accent)}
 .eh-tag.draft,.eh-tag.unsubscribed{border-color:var(--eh-alt);color:var(--eh-alt);background:var(--eh-alt-tint)}
 .eh-tag.cleaned{border-color:var(--eh-soft);color:var(--eh-soft)}
@@ -155,7 +159,7 @@
 @media(max-width:1100px){.eh-comp-r{position:static}}
 .eh-step{border:1px solid var(--eh-rule);border-radius:var(--eh-radius);background:var(--eh-panel);padding:1.2rem 1.3rem}
 .eh-step-h{display:flex;gap:.8rem;align-items:flex-start;margin-bottom:1rem}
-.eh-stepn{flex:none;width:1.8rem;height:1.8rem;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--eh-accent);border-radius:99px;color:var(--eh-accent);font-size:.85rem}
+.eh-stepn{flex:none;width:1.8rem;height:1.8rem;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--eh-accent);border-radius:var(--eh-radius);color:var(--eh-accent);font-size:.85rem}
 .eh-step-h h3{font-size:.8rem;letter-spacing:.16em;text-transform:uppercase;font-weight:500;color:var(--eh-accent)}.eh-step-h p{font-size:.84rem;color:var(--eh-soft);margin-top:.15rem}
 .eh-emoji-box{margin-top:1rem;padding-top:.9rem;border-top:1px solid var(--eh-rule)}
 .eh-emoji-toggle{display:inline-flex;gap:.5rem;align-items:center;font-size:.92rem}
@@ -185,7 +189,7 @@
 @media(max-width:700px){.eh-person{grid-template-columns:minmax(0,1fr) auto}.eh-person .eh-hide-s{display:none}}
 .eh-drawer{padding:1rem 1.1rem 1.2rem;background:var(--eh-panel-2);border-top:1px solid var(--eh-rule)}
 .eh-chips{display:flex;flex-wrap:wrap;gap:.4rem;margin:.3rem 0 .7rem}
-.eh-chip{display:inline-flex;gap:.4rem;align-items:center;border:1px solid var(--eh-rule);border-radius:99px;padding:.15rem .7rem;font-size:.84rem;background:var(--eh-panel)}.eh-chip button{background:none;border:0;color:var(--eh-soft);font-size:1rem;line-height:1;padding:0;cursor:pointer}
+.eh-chip{display:inline-flex;gap:.4rem;align-items:center;border:1px solid var(--eh-rule);border-radius:var(--eh-radius);padding:.15rem .7rem;font-size:.84rem;background:var(--eh-panel)}.eh-chip button{background:none;border:0;color:var(--eh-soft);font-size:1rem;line-height:1;padding:0;cursor:pointer}
 .eh-bar2{display:grid;grid-template-columns:minmax(6rem,11rem) minmax(0,1fr) 3.4rem;gap:.8rem;align-items:center;font-size:.9rem;margin:.5rem 0}.eh-bar2 .eh-n{text-align:right;font-variant-numeric:tabular-nums}
 .eh-people .eh-static{cursor:default}.eh-people .eh-static:hover{background:none}
 
@@ -209,6 +213,6 @@
 .eh-colors input{width:2.2rem;height:2rem;padding:0;border:0;background:none;flex:none}.eh-colors small{display:block;color:var(--eh-soft)}
 
 .eh-logo-wrap{position:relative}.eh-logo-wrap .eh-logo{width:100%}
-.eh-logo-x{position:absolute;top:.2rem;right:.2rem;width:1.5rem;height:1.5rem;padding:0;border:1px solid var(--eh-rule);border-radius:99px;background:var(--eh-panel);color:var(--eh-soft);font-size:.9rem;line-height:1;cursor:pointer}
+.eh-logo-x{position:absolute;top:.2rem;right:.2rem;width:1.5rem;height:1.5rem;padding:0;border:1px solid var(--eh-rule);border-radius:var(--eh-radius);background:var(--eh-panel);color:var(--eh-soft);font-size:.9rem;line-height:1;cursor:pointer}
 .eh-logo-x:hover{color:var(--eh-danger);border-color:var(--eh-danger)}
 .eh-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}

@@ -74,17 +74,24 @@ export function mountEmailHub(root, options = {}) {
 
   /* ---- shell ---- */
   root.classList.add('eh');
-  root.innerHTML = `<div class="eh-hub"><nav class="eh-nav" aria-label="Email sections"><button type="button" class="eh-btn eh-alt eh-create" data-act="create">${svg(ICON.create, 16)} Create</button><ul>${PAGES.map(([k, l]) => `<li><button type="button" data-act="nav" data-page="${k}" aria-current="${k === 'home'}">${svg(ICON[k])}<span>${l}</span></button></li>`).join('')}</ul></nav><div class="eh-main" aria-live="polite"><p class="eh-muted">Loading…</p></div></div>`;
+  root.innerHTML = `<div class="eh-hub"><nav class="eh-nav" aria-label="Email sections"><button type="button" class="eh-btn eh-alt eh-create" data-act="create">${svg(ICON.create, 16)} Create</button><ul id="eh-navlist"></ul></nav><div class="eh-main" aria-live="polite"><p class="eh-muted">Loading…</p></div></div>`;
 
+  /* The left nav. Audience carries its own choices (All contacts, Tags, ...) underneath while you are in it. */
+  const audienceTabs = () => [['contacts', 'All contacts'], st.caps.tags && ['tags', 'Tags'], st.caps.segments && ['segments', 'Segments'], st.caps.fields && ['fields', 'Fields'], st.caps.import && ['import', 'Import contacts']].filter(Boolean);
+  function renderNav() {
+    const cur = (k) => k === st.page && !(k === 'campaigns' && (st.sub === 'new' || st.sub === 'report'));
+    const subs = st.page === 'audience' && st.caps.contacts ? `<ul class="eh-sub" aria-label="Audience">${audienceTabs().map(([k, l]) => `<li><button type="button" data-act="asub" data-sub="${k}" aria-current="${(st.sub || 'contacts') === k}">${l}</button></li>`).join('')}</ul>` : '';
+    $('#eh-navlist').innerHTML = PAGES.map(([k, l]) => `<li><button type="button" data-act="nav" data-page="${k}" aria-current="${cur(k)}">${svg(ICON[k])}<span>${l}</span></button>${k === 'audience' ? subs : ''}</li>`).join('');
+  }
   function go(page, sub = '') {
     st.page = page; st.sub = sub; if (page !== 'campaigns') { st.open = null; st.mode = null; }
-    root.querySelectorAll('.eh-nav [data-page]').forEach((b) => b.setAttribute('aria-current', String(b.dataset.page === page && !(page === 'campaigns' && (sub === 'new' || sub === 'report')))));
+    renderNav();
     return render();
   }
   async function render() {
     main().innerHTML = '<p class="eh-muted">Loading…</p>';
     try {
-      if (!st.appUrl) { const c = await api('/config').catch(() => null); if (c) { st.label = c.label; st.caps = c.capabilities; st.appUrl = c.appUrl || ''; } }
+      if (!st.appUrl) { const c = await api('/config').catch(() => null); if (c) { st.label = c.label; st.caps = c.capabilities; st.appUrl = c.appUrl || ''; renderNav(); } }
       if (st.page === 'home') await home();
       else if (st.page === 'campaigns') await (st.sub === 'new' ? compose() : st.sub === 'report' ? report() : campaigns());
       else if (st.page === 'audience') await audience();
@@ -276,7 +283,7 @@ export function mountEmailHub(root, options = {}) {
     try {
       const d = await api('/campaigns', { method: 'POST', body: JSON.stringify({ subject: $('#eh-sub').value, previewText: $('#eh-pre').value, title: $('#eh-title').value, text: $('#eh-text').value, to: $('#eh-to').value }) });
       try { localStorage.removeItem(draftKey); } catch { /* nothing to clear */ }
-      st.filter = 'draft'; st.open = d.campaign.id; st.mode = null; st.page = 'campaigns'; st.sub = ''; root.querySelectorAll('.eh-nav [data-page]').forEach((b) => b.setAttribute('aria-current', String(b.dataset.page === 'campaigns')));
+      st.filter = 'draft'; st.open = d.campaign.id; st.mode = null; st.page = 'campaigns'; st.sub = ''; renderNav();
       await campaigns(); flash(`Saved as a draft in ${st.label}. Have a look, send yourself a test, then schedule it when you are happy.`);
     } catch (err) { say(msg, err.message, true); btn.disabled = false; }
   }
@@ -284,12 +291,11 @@ export function mountEmailHub(root, options = {}) {
   /* ---- Audience ---- */
   async function audience() {
     if (!st.caps.contacts) { main().innerHTML = head('Audience', 'Everyone you can email.', appLink('/lists/')) + '<div class="eh-card"><p class="eh-small eh-muted" style="margin:0">Contacts are managed in ' + esc(st.label) + '.</p></div>'; return; }
-    const tabs = [['contacts', 'All contacts'], st.caps.tags && ['tags', 'Tags'], st.caps.segments && ['segments', 'Segments'], st.caps.fields && ['fields', 'Fields'], st.caps.import && ['import', 'Import contacts']].filter(Boolean);
-    const sub = tabs.some(([k]) => k === st.sub) ? st.sub : 'contacts';
+    const sub = audienceTabs().some(([k]) => k === st.sub) ? st.sub : 'contacts';
     const a = await api('/audience'); if (a.connected === false) { main().innerHTML = off(); return; }
     st.audience = a;
-    main().innerHTML = head('Audience', 'Everyone you can email, and how they are grouped.', appLink('/lists/')) + `<div class="eh-tabs" role="tablist" aria-label="Audience">${tabs.map(([k, l]) => `<button type="button" class="eh-btn eh-o eh-s" role="tab" data-act="asub" data-sub="${k}" aria-selected="${sub === k}">${l}</button>`).join('')}</div><div id="eh-aud"></div>`;
-    st.sub = sub;
+    main().innerHTML = head('Audience', 'Everyone you can email, and how they are grouped.', appLink('/lists/')) + '<div id="eh-aud"></div>';
+    st.sub = sub; renderNav();
     if (sub === 'contacts') await contacts(true); else if (sub === 'tags') tagsView(); else if (sub === 'segments') segments(); else if (sub === 'fields') await fieldsView(); else importView();
   }
   async function contacts(withCounts) {
