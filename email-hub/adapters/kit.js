@@ -91,7 +91,7 @@ export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, 
       recipients, created: b.created_at || null, when: b.send_at || b.published_at || null, sent: recipients,
       openRate: stats?.openRate ?? null, clickRate: stats?.clickRate ?? null,
       stats: { opened: stats?.opened ?? null, clicked: stats?.clicked ?? null },
-      archiveUrl: b.public_url || null, editUrl: `${appUrl}/campaigns`
+      archiveUrl: b.public_url || null, editUrl: (STATUS[String(b.status || '').toLowerCase()] || 'save') === 'save' ? `${appUrl}/campaigns/${b.id}/draft` : `${appUrl}/campaigns`
     };
   }
 
