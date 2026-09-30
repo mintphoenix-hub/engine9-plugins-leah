@@ -253,7 +253,7 @@ export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, 
     createTag: guard(async (name) => { const t = await tagByName(name); return { tag: { id: t.id, name: t.name, count: 0 } }; }),
     listTemplates: guard(async () => {
       const d = await kit('/email_templates');
-      return { templates: (d?.email_templates || []).map((t) => ({ id: String(t.id), name: t.name, isDefault: Boolean(t.is_default) })) };
+      return { templates: (d?.email_templates || []).map((t) => ({ id: String(t.id), name: t.name, isDefault: Boolean(t.is_default), url: `${appUrl}/account/email_layout_templates/${t.id}/edit` })) };
     }),
     fields: guard(async () => {
       const d = await kit('/custom_fields');

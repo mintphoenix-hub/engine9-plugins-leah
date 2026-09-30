@@ -63,7 +63,8 @@ console.log('templates and contact history');
     'GET /subscribers/9/tags': { tags: [{ id: 3, name: 'website' }] },
   }), fields: { joined: 'moved_signup', source: 'moved_source' } });
   assert.equal(capabilitiesOf(kit).templates, true);
-  assert.deepEqual((await kit.listTemplates()).templates, [{ id: '1', name: 'House', isDefault: true }, { id: '2', name: 'Plain', isDefault: false }]);
+  assert.deepEqual((await kit.listTemplates()).templates.map(({ url, ...t }) => t), [{ id: '1', name: 'House', isDefault: true }, { id: '2', name: 'Plain', isDefault: false }]);
+  assert.ok((await kit.listTemplates()).templates.every((t) => /\/account\/email_layout_templates\/\d+\/edit$/.test(t.url)), 'each Kit template links to itself in Kit');
   const c = await kit.contact('9'); assert.deepEqual([c.joined, c.source, c.tags[0].name], ['2022-12-09', 'Admin Add', 'website']);
   const plain = createKitProvider({ apiKey: 'kit_x', fetch: kitFetch({ 'GET /subscribers/9': { subscriber: { id: 9, email_address: 'a@b.co', fields: { signup_date: '2020-01-01' } } } }) });
   assert.equal((await plain.contact('9')).joined, '2020-01-01', 'no configured field: the neutral default');

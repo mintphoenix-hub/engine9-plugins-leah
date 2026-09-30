@@ -207,7 +207,7 @@ A service's templates are its own designs. The hub lists them (Content), lets a 
 - Kit's API returns a template's name but never its HTML, so for a preview the host gives the hub copies:
   `createEmailHub({ templates: { 'Template name': '<html>…{{ message_content }}…</html>' }, defaultTemplate: 'Template name' })`. Without a
   copy the preview says so and links to the template in the service; the hub never guesses.
-- `GET /templates/:id/preview` returns `{ name, isDefault, html | imageUrl }`. `PATCH /campaigns/:id { templateId }` needs
+- `GET /templates/:id/preview` returns `{ name, isDefault, url, bare, html | imageUrl }` (`bare`: the copy only wraps the message, so the screen says the preview is the message text only and links to the template in the service via `url`). `PATCH /campaigns/:id { templateId }` needs
   `capabilities.templateChange`; a template that is not in the service's own list is refused.
 - A provider adds `templatePreview(id)` (optional) to show one itself, and returns `thumbnail` from `listTemplates`.
 
@@ -262,6 +262,7 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 
 ## Version history
 
+- **3.16.1**: Template previews say plainly when they are only the message (a template that just wraps it, or one with no copy on the host): the same note and "Preview the full design in Kit" button the draft review has, instead of a few words on a white box. `GET /templates/:id/preview` adds `url` and `bare`; the Kit `listTemplates` returns each template's address in Kit. UI only, no schema change.
 - **3.16.0**: Choosing and previewing templates, for Kit and Mailchimp: a "Design" chooser on Create email, "Change design" on a draft (where the service can), and a clickable Templates list on Content with a preview (the host's copy for Kit, Mailchimp's own picture). Mailchimp: a new email can be made in a user template; `listTemplates` returns `thumbnail`; `templatePreview`. New `capabilities.templateChange` (Kit and memory: true; Mailchimp: false), `templateSample` option. The memory provider lists two templates. No schema change.
 - **3.15.0**: Layouts (`layouts.js`): `layouts` and `layoutTemplateId` options, Create email offers "New show"-style layouts beside "Write it", a live preview, editing a draft by its fields, and Duplicate opening the copy with every field filled in. New table `engine9_email_hub_layout` (`migrate-3.15.0.sql`; additive). `capabilities.layouts` (Kit, memory). Kit: a duplicate keeps the original's template; `createCampaign` takes `templateId`; `updateCampaign` takes `html`.
 - **3.14.0**: The review explains missing pictures in the preview (the host's `img-src` rule) and the README says how to fix it. Paste HTML (`pasted.js`): Create email can take a finished email as HTML, cleaned and checked (must have the unsubscribe tag), sent as pasted. `GET /config` adds `mergeTags`; `POST /campaigns` accepts `html` and may return `warnings`. Additive; no schema change.

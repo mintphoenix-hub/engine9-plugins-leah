@@ -367,6 +367,8 @@ export function mountEmailHub(root, options = {}) {
   const templatePicker = (selected = '') => (st.tpls?.length > 1 || (st.tpls?.length === 1 && !st.tpls[0].isDefault)
     ? `<div class="eh-field" style="margin:.9rem 0 0"><label for="eh-tpl">Design</label><select id="eh-tpl">${st.tpls.some((t) => t.isDefault) ? '' : `<option value=""${selected ? '' : ' selected'}>Standard (no template)</option>`}${st.tpls.map((t) => `<option value="${esc(t.id)}"${String(t.id) === String(selected || st.tpls.find((x) => x.isDefault)?.id || '') ? ' selected' : ''}>${esc(t.name)}${t.isDefault ? ' (default)' : ''}</option>`).join('')}</select><p class="eh-small eh-muted" style="margin:.4rem 0 0">The ${esc(st.label)} template it is sent in. Most emails use the default. See them all under Content.</p></div>`
     : '');
+  /* The template opened in the service itself, where its full design can be previewed. */
+  const tplLink = (d) => (d?.url ? `<p style="margin:.7rem 0 0"><a class="eh-btn eh-o eh-s" href="${esc(d.url)}" target="_blank" rel="noopener">Preview the full design in ${esc(st.label)} &#8599;</a></p>` : '');
   const templateBox = (c) => `<div class="eh-box"><div class="eh-field"><label for="tp-sel">Design this email is sent in</label><select id="tp-sel">${(st.tpls || []).map((t) => `<option value="${esc(t.id)}"${String(t.id) === String(st.tplOf?.[c.id]) ? ' selected' : ''}>${esc(t.name)}${t.isDefault ? ' (default)' : ''}</option>`).join('')}</select></div><div class="eh-row"><button class="eh-btn eh-s" type="button" data-act="tpl-save" data-id="${esc(c.id)}">Use this design</button><button class="eh-btn eh-o eh-s" type="button" data-act="mode-x">Cancel</button></div><p class="eh-small eh-muted" style="margin:.5rem 0 0">Changes how ${esc(st.label)} wraps the email. The preview above shows it once saved.</p></div>`;
 
   /* ---- Create email from a host's layout (a show announcement): fields in, the whole email out ---- */
@@ -564,8 +566,8 @@ export function mountEmailHub(root, options = {}) {
         box.innerHTML = d.imageUrl
           ? `<div class="eh-frame-box" style="margin-top:1rem"><div class="eh-frame-head"><small>PICTURE OF THE TEMPLATE</small><b>${esc(d.name)}</b></div><img src="${esc(d.imageUrl)}" alt="${esc(d.name)}" style="display:block;max-width:100%;margin:0 auto"></div>`
           : d.html
-          ? `<div class="eh-frame-box" style="margin-top:1rem"><div class="eh-frame-head"><small>PREVIEW WITH A SAMPLE MESSAGE</small><b>${esc(d.name)}</b></div><iframe id="tpl-frame" class="eh-frame" sandbox="allow-same-origin" title="Preview of ${esc(d.name)}"></iframe></div>`
-          : `<p class="eh-small eh-muted" style="margin-top:1rem"><b>${esc(d.name)}</b> has no preview copy on this site. Open it in ${esc(st.label)} to see it.</p>`;
+          ? `<div class="eh-frame-box" style="margin-top:1rem"><div class="eh-frame-head"><small>PREVIEW WITH A SAMPLE MESSAGE</small><b>${esc(d.name)}</b></div><iframe id="tpl-frame" class="eh-frame" sandbox="allow-same-origin" title="Preview of ${esc(d.name)}"></iframe>${d.bare ? `<p class="eh-bare eh-small eh-muted" style="padding:.6rem .8rem;margin:0">This template only holds the message, so this is the message text only. The full designed email can be previewed on ${esc(st.label)} or via test email.</p>` : ''}</div>${tplLink(d)}`
+          : `<p class="eh-small eh-muted" style="margin-top:1rem"><b>${esc(d.name)}</b> has no preview here. Its design lives in ${esc(st.label)}: preview it there, or send a test email.</p>${tplLink(d)}`;
         if (d.html && !d.imageUrl) { const f = $('#tpl-frame'); f.addEventListener('load', () => { fit(f); picturesNote(f); }); f.srcdoc = d.html; f.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
       } catch (err) { box.innerHTML = `<p class="eh-msg eh-bad">${esc(err.message)}</p>`; }
     })();

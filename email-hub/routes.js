@@ -278,11 +278,12 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
         if (!found) throw new HubError('That template is not in ' + provider.label + '.', 404);
         if (provider.templatePreview) {                     // the service can show one itself (Mailchimp keeps a picture of each)
           const own = await provider.templatePreview(id).catch(() => null);
-          if (own && (own.imageUrl || own.html)) return json(200, { name: found.name, isDefault: Boolean(found.isDefault), imageUrl: own.imageUrl || null, html: own.html || null });
+          if (own && (own.imageUrl || own.html)) return json(200, { name: found.name, isDefault: Boolean(found.isDefault), url: found.url || null, imageUrl: own.imageUrl || null, html: own.html || null });
         }
         const copy = pickTemplate(templates, found.name);
         const style = await loadStyle();
-        return json(200, { name: found.name, isDefault: Boolean(found.isDefault), html: copy ? renderTemplate(copy.html, { message: templateSample || '<p style="font-family:Helvetica,Arial,sans-serif;font-size:17px;line-height:1.7;margin:0;">Your message appears here.</p>', address: style.address || brand.address || 'Your postal address' }) : null });
+        // `bare`: a copy that only wraps the message (no background of its own), so its preview is a few words on a plain page. The screens say so.
+        return json(200, { name: found.name, isDefault: Boolean(found.isDefault), url: found.url || null, bare: Boolean(copy && !/background|bgcolor/i.test(copy.html)), html: copy ? renderTemplate(copy.html, { message: templateSample || '<p style="font-family:Helvetica,Arial,sans-serif;font-size:17px;line-height:1.7;margin:0;">Your message appears here.</p>', address: style.address || brand.address || 'Your postal address' }) : null });
       }
       if (area === 'templates' && method === 'GET') { need('templates'); return json(200, await provider.listTemplates()); }
       if (area === 'fields' && method === 'GET') { need('fields'); return json(200, await provider.fields()); }
