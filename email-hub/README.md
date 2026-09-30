@@ -281,6 +281,7 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 
 ## Version history
 
+- **3.21.1**: Fix: web address fields (a layout's link or picture address) had no style, so they drew as bare text and did not look like something to click into; they now look like every other field. Web-address fields with no hint of their own say what to paste. `ui.test.mjs` fails if a field type used by the screens has no style.
 - **3.22.0**: "Paste HTML" is a tab beside "Write it" and the layouts at the top of Create (on a host that offers layouts), so pasting a finished email as HTML is one click, not a mode inside Write it. Same checks as before: scripts and frames are removed, the email must carry the unsubscribe tag, the address is warned about. UI only.
 - **3.21.0**: Duplicate opens the Create screen filled in (subject, preview, name, words) for emails the hub wrote from plain words. `GET /campaigns/:id/source`; `textFromBodyHtml`. Layout emails and service-made designs are copied in place as before. Additive; no schema change.
 - **3.20.0**: Create has a "Save and schedule…" button beside "Save draft" (Write it and layouts alike): it saves the draft and opens its Schedule form straight away. Scheduling itself is unchanged: a draft, a time at least the lead time ahead, and a ticked "I have read the preview". UI only.

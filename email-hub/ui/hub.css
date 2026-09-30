@@ -62,7 +62,7 @@
 .eh-row{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center}
 
 /* fields */
-.eh input[type=text],.eh input[type=search],.eh input[type=email],.eh input[type=datetime-local],.eh select,.eh textarea{width:100%;padding:.7em .9em;background:var(--eh-panel);border:1px solid var(--eh-rule);border-radius:var(--eh-radius);color:var(--eh-ink)}
+.eh input[type=text],.eh input[type=search],.eh input[type=email],.eh input[type=url],.eh input[type=tel],.eh input[type=number],.eh input[type=datetime-local],.eh select,.eh textarea{width:100%;padding:.7em .9em;background:var(--eh-panel);border:1px solid var(--eh-rule);border-radius:var(--eh-radius);color:var(--eh-ink)}
 .eh input:focus,.eh select:focus,.eh textarea:focus{outline:2px solid var(--eh-accent);outline-offset:1px;border-color:transparent}
 .eh input[type=checkbox],.eh input[type=radio]{width:auto}
 .eh label{font-size:calc(.7rem*var(--eh-scale,1));letter-spacing:.14em;text-transform:uppercase;color:var(--eh-soft)}
