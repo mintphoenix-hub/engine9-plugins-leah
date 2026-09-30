@@ -1,6 +1,6 @@
 {
   "name": "@mintphoenix/plugins",
-  "version": "3.16.1",
+  "version": "3.16.2",
   "type": "module",
   "description": "Engine9 native plugins. Each directory with an index.js is one plugin, identity @mintphoenix/plugins/<dir>.",
   "license": "MIT",
