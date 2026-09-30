@@ -112,3 +112,7 @@ function fakeWin({ styles = {}, vars = {}, htmlBg = '', dataBg = 'rgba(0, 0, 0, 
   ok('hints sample the site\'s own elements only (never the hub\'s), so a site with gold accents and burgundy buttons is read correctly');
 }
 console.log(`\n${n} passed`);
+
+/* the stylesheet is plain CSS: a stray escape sequence (a literal backslash-n) once broke the first rule of a block */
+import { readFileSync as _rf } from 'node:fs';
+{ const css = _rf(new URL('./ui/hub.css', import.meta.url), 'utf8'); assert.ok(!css.includes('\\n'), 'no stray backslash-n in hub.css'); console.log('  ok  hub.css has no stray escape sequences'); }
