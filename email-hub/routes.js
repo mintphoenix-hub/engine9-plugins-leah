@@ -282,8 +282,14 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
         }
         const copy = pickTemplate(templates, found.name);
         const style = await loadStyle();
-        // `bare`: a copy that only wraps the message (no background of its own), so its preview is a few words on a plain page. The screens say so.
-        return json(200, { name: found.name, isDefault: Boolean(found.isDefault), url: found.url || null, bare: Boolean(copy && !/background|bgcolor/i.test(copy.html)), html: copy ? renderTemplate(copy.html, { message: templateSample || '<p style="font-family:Helvetica,Arial,sans-serif;font-size:17px;line-height:1.7;margin:0;">Your message appears here.</p>', address: style.address || brand.address || 'Your postal address' }) : null });
+        const address = style.address || brand.address || 'Your postal address';
+        // The message shown inside the template: the host's own sample for THIS template when it gives one (a template that holds a whole
+        // designed email is previewed around a sample of that email), else the host's general sample, else one plain sentence.
+        const pick = typeof templateSample === 'function' ? templateSample(found.name, { style, address }) : (templateSample && typeof templateSample === 'object' ? templateSample[found.name] : templateSample);
+        const message = (typeof pick === 'function' ? pick({ style, address }) : pick) || '<p style="font-family:Helvetica,Arial,sans-serif;font-size:17px;line-height:1.7;margin:0;">Your message appears here.</p>';
+        const html = copy ? renderTemplate(copy.html, { message, address }) : null;
+        // `bare`: what is shown has no background of its own, so it is a few words on a plain page. The screens then say so.
+        return json(200, { name: found.name, isDefault: Boolean(found.isDefault), url: found.url || null, bare: Boolean(html && !/background|bgcolor/i.test(html)), html });
       }
       if (area === 'templates' && method === 'GET') { need('templates'); return json(200, await provider.listTemplates()); }
       if (area === 'fields' && method === 'GET') { need('fields'); return json(200, await provider.fields()); }

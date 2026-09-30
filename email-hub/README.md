@@ -209,6 +209,8 @@ A service's templates are its own designs. The hub lists them (Content), lets a 
   copy the preview says so and links to the template in the service; the hub never guesses.
 - `GET /templates/:id/preview` returns `{ name, isDefault, url, bare, html | imageUrl }` (`bare`: the copy only wraps the message, so the screen says the preview is the message text only and links to the template in the service via `url`). `PATCH /campaigns/:id { templateId }` needs
   `capabilities.templateChange`; a template that is not in the service's own list is refused.
+- The message shown inside a template is `templateSample`: a string for every template, an object keyed by template name, or a function `(name, { style, address }) => html`
+  (each may itself be a function returning the html). Give a template that holds a whole designed email a sample of that email, so its preview is the design.
 - A provider adds `templatePreview(id)` (optional) to show one itself, and returns `thumbnail` from `listTemplates`.
 
 ## Options a host may set
@@ -262,6 +264,7 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 
 ## Version history
 
+- **3.16.3**: `templateSample` may be an object keyed by template name (or a function of the name), so a template that holds a whole designed email is previewed around a sample of that email, not one plain sentence. The preview is marked `bare` only when what it shows has no background of its own. No schema change.
 - **3.16.2**: Phone layout: a row of tabs (for example Audience's Subscribed / Unsubscribed / Bounced / Not confirmed filter) wraps instead of scrolling sideways, so no tab is hidden off the edge; sliders get a finger-sized height on touch screens. CSS only.
 - **3.16.1**: Template previews say plainly when they are only the message (a template that just wraps it, or one with no copy on the host): the same note and "Preview the full design in Kit" button the draft review has, instead of a few words on a white box. `GET /templates/:id/preview` adds `url` and `bare`; the Kit `listTemplates` returns each template's address in Kit. UI only, no schema change.
 - **3.16.0**: Choosing and previewing templates, for Kit and Mailchimp: a "Design" chooser on Create email, "Change design" on a draft (where the service can), and a clickable Templates list on Content with a preview (the host's copy for Kit, Mailchimp's own picture). Mailchimp: a new email can be made in a user template; `listTemplates` returns `thumbnail`; `templatePreview`. New `capabilities.templateChange` (Kit and memory: true; Mailchimp: false), `templateSample` option. The memory provider lists two templates. No schema change.
