@@ -197,13 +197,13 @@ export function mountEmailHub(root, options = {}) {
   function panel(c, k) {
     const id = esc(c.id);
     const box = st.mode === 'edit' && k === 'draft' ? `<div class="eh-box"><div class="eh-field"><label for="ed-sub">Subject line</label><input id="ed-sub" type="text" maxlength="150" value="${esc(c.subject)}"></div><div class="eh-field"><label for="ed-pre">Preview text</label><input id="ed-pre" type="text" maxlength="150" value="${esc(c.preview)}"></div><div class="eh-field"><label for="ed-title">Name for your own reference</label><input id="ed-title" type="text" maxlength="100" value="${esc(c.title)}"></div><div class="eh-row"><button class="eh-btn eh-s" type="button" data-act="edit-save" data-id="${id}">Save changes</button><button class="eh-btn eh-o eh-s" type="button" data-act="mode-x">Cancel</button></div></div>`
-      : st.mode === 'template' && k === 'draft' && st.caps.templateChange && st.tpls?.length > 1 ? templateBox(c)
+      : st.mode === 'template' && k === 'draft' && st.caps.templateChange && !st.newTemplateId && st.tpls?.length > 1 ? templateBox(c)
       : st.mode === 'schedule' && k === 'draft' ? scheduleBox(c)
       : st.mode === 'test' && st.caps.test ? `<div class="eh-box"><div class="eh-field"><label for="ts-to">Send a test to (up to three addresses, separated by commas)</label><input id="ts-to" type="text" autocomplete="off"></div><div class="eh-row"><button class="eh-btn eh-s" type="button" data-act="test-send" data-id="${id}">Send test</button><button class="eh-btn eh-o eh-s" type="button" data-act="mode-x">Cancel</button></div><p class="eh-small eh-muted" style="margin:.5rem 0 0">A test goes only to these addresses, never to your list.</p></div>`
       : st.mode === 'delete' && k === 'draft' ? `<div class="eh-box"><p style="margin:0 0 .7rem">Delete the draft &ldquo;${esc(c.subject || c.title || 'untitled')}&rdquo;? This cannot be undone.</p><div class="eh-row"><button class="eh-btn eh-danger eh-s" type="button" data-act="del" data-id="${id}">Delete draft</button><button class="eh-btn eh-o eh-s" type="button" data-act="mode-x">Cancel</button></div></div>` : '';
     const acts = [];
     if (k === 'draft') acts.push(`<button class="eh-btn eh-s" type="button" data-act="m-schedule" data-id="${id}">Schedule</button>`, `<button class="eh-btn eh-o eh-s" type="button" data-act="m-edit" data-id="${id}">Edit details</button>`);
-    if (k === 'draft' && st.caps.templateChange && st.tpls?.length > 1) acts.push(`<button class="eh-btn eh-o eh-s" type="button" data-act="m-template" data-id="${id}">Change design</button>`);
+    if (k === 'draft' && st.caps.templateChange && !st.newTemplateId && st.tpls?.length > 1) acts.push(`<button class="eh-btn eh-o eh-s" type="button" data-act="m-template" data-id="${id}">Change design</button>`);
     if (k === 'scheduled') acts.push(`<button class="eh-btn eh-o eh-s" type="button" data-act="unsched" data-id="${id}">Unschedule</button>`);
     if (st.caps.test) acts.push(`<button class="eh-btn eh-o eh-s" type="button" data-act="m-test" data-id="${id}">Send a test</button>`);
     acts.push(`<button class="eh-btn eh-o eh-s" type="button" data-act="dup" data-id="${id}">Duplicate</button>`);
@@ -357,6 +357,44 @@ export function mountEmailHub(root, options = {}) {
     } catch (err) { say(msg, err.message, true); btn.disabled = false; }
   }
 
+  /* ---- Choose a template: what Create opens, so the design is picked first, from names and pictures ---- */
+  let chooserOpener = null;
+  const closeChooser = () => { $('#eh-chooser')?.remove(); document.removeEventListener('keydown', chooserKey); chooserOpener?.focus?.(); chooserOpener = null; };
+  const chooserKey = (e) => { if (e.key === 'Escape') closeChooser(); };
+  async function chooseTemplate(opener = null) {
+    await Promise.all([loadLayouts(), loadTemplates()]);
+    if (!st.look) st.look = await api('/look').catch(() => null);
+    const layouts = st.layouts?.enabled ? st.layouts.layouts : [];
+    // A host whose emails are whole designed emails (newTemplateId) fixes the design, so the service's own templates are not choices there.
+    const tpls = st.newTemplateId ? [] : (st.tpls || []);
+    const cards = [{ key: 'text', name: 'Write it', desc: 'A plain email. Type your words and the design is added for you.', srcdoc: bodyHtml('Hello there,\n\nYour words appear here, in the look of every email you send.\n\nWarmly,\n' + (brandName || 'Your name'), { style: st.look?.style, address: 'Your postal address', unsubscribe: '#', brand: { style: st.look?.defaults } }) },
+      ...layouts.map((l) => ({ key: 'layout:' + l.id, name: l.label, desc: l.description || 'Made from fields.', layout: l })),
+      ...tpls.map((t) => ({ key: 'tpl:' + t.id, name: t.name, desc: t.isDefault ? 'The default design' : `A ${st.label} template`, tpl: t }))];
+    if (cards.length < 2) { st.newKind = ''; st.newTemplate = ''; return go('campaigns', 'new'); }        // nothing to choose between
+    chooserOpener = opener; document.getElementById('eh-chooser')?.remove();
+    root.insertAdjacentHTML('beforeend', `<div class="eh-modal-back" id="eh-chooser" data-act="chooser-x"><div class="eh-modal" role="dialog" aria-modal="true" aria-labelledby="eh-ch-t"><div class="eh-modal-head"><h3 id="eh-ch-t">Choose a template</h3><button type="button" class="eh-btn eh-o eh-s" data-act="chooser-x" aria-label="Close">Close</button></div><p class="eh-small eh-muted" style="margin:0 0 1rem">Pick how the email starts. You can write the words, then check it before anything is scheduled.</p><div class="eh-choose">${cards.map((c, i) => `<button type="button" class="eh-pick" data-act="chooser-pick" data-key="${esc(c.key)}" data-i="${i}"><span class="eh-thumb" aria-hidden="true"><span class="eh-thumb-wait">Loading&hellip;</span></span><b>${esc(c.name)}</b><span class="eh-small eh-muted">${esc(c.desc)}</span></button>`).join('')}</div></div></div>`);
+    document.addEventListener('keydown', chooserKey);
+    root.querySelector('#eh-chooser .eh-pick')?.focus();
+    // previews arrive one by one, so the popup opens at once
+    cards.forEach(async (c, i) => {
+      const slot = root.querySelector(`#eh-chooser .eh-pick[data-i="${i}"] .eh-thumb`); if (!slot) return;
+      try {
+        let doc = c.srcdoc, img = null;
+        if (c.layout) doc = c.layout.sample ? (await api(`/layouts/${c.layout.id}/render`, { method: 'POST', body: JSON.stringify({ values: c.layout.sample }) })).html : null;
+        else if (c.tpl) { const d = await api(`/templates/${c.tpl.id}/preview`); doc = d.html; img = d.imageUrl; }
+        if (img) slot.innerHTML = `<img src="${esc(img)}" alt="" style="width:100%;display:block">`;
+        else if (doc) slot.innerHTML = `<iframe tabindex="-1" sandbox="allow-same-origin" title="" style="width:600px;height:1000px;border:0;transform:scale(.3);transform-origin:0 0;pointer-events:none;background:#fff"></iframe>`, slot.firstChild.srcdoc = doc;
+        else slot.innerHTML = '<span class="eh-thumb-wait">No preview</span>';
+      } catch { slot.innerHTML = '<span class="eh-thumb-wait">No preview</span>'; }
+    });
+    st.chooserCards = cards;
+  }
+  function pickTemplate(i) {
+    const c = st.chooserCards?.[Number(i)]; if (!c) return;
+    closeChooser(); st.newKind = c.layout ? c.layout.id : ''; st.newTemplate = c.tpl ? c.tpl.id : '';
+    return go('campaigns', 'new');
+  }
+
   /* ---- Templates: the service's own designs, chosen for an email ---- */
   async function loadTemplates() {
     if (st.tpls) return st.tpls;
@@ -365,7 +403,7 @@ export function mountEmailHub(root, options = {}) {
     return st.tpls;
   }
   /* "Design" chooser for a new email. Only when there is a real choice. */
-  const templatePicker = (selected = '') => (st.tpls?.length > 1 || (st.tpls?.length === 1 && !st.tpls[0].isDefault)
+  const templatePicker = (selected = '') => (!st.newTemplateId && st.tpls?.length > 1 || (st.tpls?.length === 1 && !st.tpls[0].isDefault)
     ? `<div class="eh-field" style="margin:.9rem 0 0"><label for="eh-tpl">Design</label><select id="eh-tpl">${st.tpls.some((t) => t.isDefault) ? '' : `<option value=""${selected || st.newTemplateId ? '' : ' selected'}>Standard (no template)</option>`}${st.tpls.map((t) => `<option value="${esc(t.id)}"${String(t.id) === String(selected || st.newTemplateId || st.tpls.find((x) => x.isDefault)?.id || '') ? ' selected' : ''}>${esc(t.name)}${t.isDefault ? ' (default)' : ''}</option>`).join('')}</select><p class="eh-small eh-muted" style="margin:.4rem 0 0">The ${esc(st.label)} template it is sent in. Most emails use the default. See them all under Content.</p></div>`
     : '');
   /* The template opened in the service itself, where its full design can be previewed. */
@@ -562,7 +600,9 @@ export function mountEmailHub(root, options = {}) {
     if (a === 'menu') { const list = b.nextElementSibling; closeMenus(list); const show = list.classList.contains('eh-hide'); list.classList.toggle('eh-hide', !show); b.setAttribute('aria-expanded', String(show)); return; }
     closeMenus();
     if (a === 'nav') return go(b.dataset.page);
-    if (a === 'create') return go('campaigns', 'new');
+    if (a === 'chooser-x') { if (e.target.closest('[data-act=chooser-x]') === b && (b.tagName === 'BUTTON' || e.target === b)) return closeChooser(); }
+    if (a === 'chooser-pick') return pickTemplate(b.dataset.i);
+    if (a === 'create') return chooseTemplate(b);
     if (a === 'fresh') { try { localStorage.removeItem(draftKey); } catch { /* nothing */ } return compose(); }
     if (a === 'refresh-list') return campaigns();
     if (a === 'goto') { st.open = b.dataset.id; st.filter = 'all'; st.q = ''; return go('campaigns'); }

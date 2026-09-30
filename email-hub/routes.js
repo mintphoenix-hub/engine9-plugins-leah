@@ -275,7 +275,7 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
     const [, area, id, sub] = m || [];
     const url = new URL(request.url);
     try {
-      if (area === 'config') return json(200, { newTemplateId: String(newTemplateId || ''), label: provider.label, capabilities: caps, brand: { name: brand.name || '' }, appUrl: provider.appUrl('/'), unsubscribePage: brand.unsubscribePage || null, schedule: rules, mergeTags: { unsubscribe: provider.mergeTags.unsubscribe, address: provider.mergeTags.address } });
+      if (area === 'config') return json(200, { newTemplateId: String(newTemplateId || ''), layoutTemplateId: String(layoutTemplateId || ''), label: provider.label, capabilities: caps, brand: { name: brand.name || '' }, appUrl: provider.appUrl('/'), unsubscribePage: brand.unsubscribePage || null, schedule: rules, mergeTags: { unsubscribe: provider.mergeTags.unsubscribe, address: provider.mergeTags.address } });
       // Logos and the archive do not need the service to be connected (the archive outlives it).
       if (isExtra) return (await extras(request, path, method)) || json(405, { error: 'That is not something we do.' });
       if (!provider.connected()) {
@@ -308,7 +308,14 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
         // `bare`: what is shown has no background of its own, so it is a few words on a plain page. The screens then say so.
         return json(200, { name: found.name, isDefault: Boolean(found.isDefault), url: found.url || null, bare: Boolean(html && !/background|bgcolor/i.test(html)), html });
       }
-      if (area === 'templates' && method === 'GET') { need('templates'); return json(200, await provider.listTemplates()); }
+      if (area === 'templates' && method === 'GET') {
+        need('templates');
+        const all = await provider.listTemplates();
+        // The template that only holds a message (newTemplateId, layoutTemplateId) is plumbing, not a design: listing it beside the real ones
+        // just looks like a duplicate of what is sent in it. It stays usable; it is only not offered.
+        const plumbing = new Set([newTemplateId, layoutTemplateId].filter(Boolean).map(String));
+        return json(200, { ...all, templates: (all.templates || []).filter((t) => !plumbing.has(String(t.id))) });
+      }
       if (area === 'fields' && method === 'GET') { need('fields'); return json(200, await provider.fields()); }
       if (area === 'import' && method === 'POST') {
         need('import');
