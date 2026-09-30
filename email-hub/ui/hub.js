@@ -154,7 +154,7 @@ export function mountEmailHub(root, options = {}) {
 
   /* ---- Campaigns ---- */
   async function campaigns() {
-    const d = await api('/campaigns');
+    const [d] = await Promise.all([api('/campaigns'), loadLayouts()]);
     if (d.connected === false) { st.label = d.label || st.label; main().innerHTML = off(); return; }
     st.all = d.campaigns; st.dc = d.dc || st.dc;
     // Emails carried over from a service that is gone or replaced: read-only, and nothing is shown when there are none.
@@ -205,6 +205,7 @@ export function mountEmailHub(root, options = {}) {
     if (k === 'scheduled') acts.push(`<button class="eh-btn eh-o eh-s" type="button" data-act="unsched" data-id="${id}">Unschedule</button>`);
     if (st.caps.test) acts.push(`<button class="eh-btn eh-o eh-s" type="button" data-act="m-test" data-id="${id}">Send a test</button>`);
     acts.push(`<button class="eh-btn eh-o eh-s" type="button" data-act="dup" data-id="${id}">Duplicate</button>`);
+    if (k === 'draft' && st.layouts?.enabled) acts.unshift(`<button class="eh-btn eh-o eh-s eh-hide" type="button" data-act="edit-fields" data-id="${id}" data-fields="1">Edit the fields</button>`);
     if (k === 'draft') acts.push(`<button class="eh-btn eh-danger eh-s" type="button" data-act="m-delete" data-id="${id}">Delete draft</button>`);
     if (c.editUrl) acts.push(`<a class="eh-btn eh-o eh-s" href="${esc(c.editUrl)}" target="_blank" rel="noopener">${k === 'draft' ? 'Preview the full design in' : 'Edit the design in'} ${esc(st.label)} &#8599;</a>`);
     if (c.archive) return `<div class="eh-panel-grid"><div class="eh-frame-box"><div class="eh-frame-head"><small>KEPT FROM ${esc(String(c.source).toUpperCase())}, READ-ONLY</small><b>${esc(c.subject || '(no subject)')}</b>${c.preview ? `<span>${esc(c.preview)}</span>` : ''}</div><iframe class="eh-frame" sandbox="allow-same-origin" title="Preview of ${esc(c.subject)}" data-frame="${id}"></iframe></div>
@@ -238,6 +239,10 @@ export function mountEmailHub(root, options = {}) {
     const own = findEmail(id);
     try { const d = await api(own?.archive ? `/archive/${own.source}/${own.sourceId}/content` : `/campaigns/${id}/content`); f.srcdoc = d.designed || d.html || '<p style="font-family:sans-serif;padding:1rem">No content yet.</p>'; const bare = !own?.archive && !d.designed && d.html && !/background|bgcolor/i.test(d.html); const box = f.closest('.eh-frame-box'); if (box && !box.querySelector('.eh-bare')) box.insertAdjacentHTML('beforeend', bare ? `<p class="eh-bare eh-small eh-muted" style="padding:.6rem .8rem;margin:0">This is the message text only. The full designed email can be previewed on ${esc(st.label)} or via test email.</p>` : ''); }
     catch (err) { f.srcdoc = `<p style="font-family:sans-serif;padding:1rem">${esc(err.message)}</p>`; }
+    const own2 = findEmail(id);
+    if (own2 && kindOf(own2) === 'draft' && st.layouts?.enabled) {         // a draft made from a layout can be changed by editing its fields
+      try { const l = await api(`/campaigns/${id}/layout`); if (l.layout) root.querySelectorAll(`[data-act="edit-fields"][data-id="${id}"]`).forEach((b) => b.classList.remove('eh-hide')); } catch { /* no fields to edit */ }
+    }
     const c = findEmail(id); if (!c || kindOf(c) !== 'draft' || !st.caps.checklist) return;
     try { const r = await api(`/campaigns/${id}/checklist`); const el = $('#eh-ready'); if (!el) return;
       el.innerHTML = r.ready ? `<span>&#10003;</span> ${esc(st.label)} says this is ready to send.` : '<span>&#33;</span> Not ready yet:<ul style="margin:.3rem 0 0;padding-left:1.2rem;list-style:disc">' + r.problems.map((p) => `<li>${esc(p.heading || p.details)}</li>`).join('') + '</ul>';
@@ -259,7 +264,7 @@ export function mountEmailHub(root, options = {}) {
     const back = (text, filter) => { if (filter) st.filter = filter; st.mode = null; draw(true); flash(text); };
     if (action === 'edit-save') busy(async () => { const d = await api(`/campaigns/${id}`, { method: 'PATCH', body: JSON.stringify({ subject: $('#ed-sub').value, previewText: $('#ed-pre').value, title: $('#ed-title').value }) }); Object.assign(c, d.campaign); back('Details saved.'); });
     else if (action === 'test-send') busy(async () => { const d = await api(`/campaigns/${id}/test`, { method: 'POST', body: JSON.stringify({ emails: $('#ts-to').value.split(/[\s,;]+/).filter(Boolean) }) }); say(msg(), `Test sent to ${d.sentTo.join(', ')}.`); });
-    else if (action === 'dup') busy(async () => { const d = await api(`/campaigns/${id}/duplicate`, { method: 'POST' }); const l = await api('/campaigns'); st.all = l.campaigns; st.open = d.campaign.id; back('Copied. The copy is a draft; nothing has been sent.', 'draft'); });
+    else if (action === 'dup') busy(async () => { const d = await api(`/campaigns/${id}/duplicate`, { method: 'POST' }); const l = await api('/campaigns'); st.all = l.campaigns; st.open = d.campaign.id; const made = (await loadLayouts()).enabled ? await api(`/campaigns/${d.campaign.id}/layout`).catch(() => null) : null; if (made?.layout) { st.filter = 'draft'; st.page = 'campaigns'; st.sub = 'new'; return editFields(d.campaign.id, true); } back('Copied. The copy is a draft; nothing has been sent.', 'draft'); });
     else if (action === 'del') busy(async () => { await api(`/campaigns/${id}`, { method: 'DELETE' }); st.all = st.all.filter((x) => x.id !== id); st.open = null; back('Draft deleted.'); });
     else if (action === 'unsched') busy(async () => { const d = await api(`/campaigns/${id}/unschedule`, { method: 'POST' }); Object.assign(c, d.campaign); st.open = id; back('Unscheduled. It is a draft again and will not be sent.', 'draft'); });
     else if (action === 'sched') busy(async () => { const at = whenAt($('#eh-when').value); const d = await api(`/campaigns/${id}/schedule`, { method: 'POST', body: JSON.stringify({ sendAt: new Date(at).toISOString(), confirm: $('#eh-ok').checked }) }); Object.assign(c, d.campaign); st.open = null; back(`Scheduled. It will go out ${when(d.scheduledFor)}. You can unschedule it until then.`, 'scheduled'); });
@@ -286,9 +291,10 @@ export function mountEmailHub(root, options = {}) {
   /* ---- Create email ---- */
   const step = (n, title, hint, inner) => `<section class="eh-step"><div class="eh-step-h"><span class="eh-stepn" aria-hidden="true">${n}</span><div><h3>${title}</h3>${hint ? `<p>${hint}</p>` : ''}</div></div>${inner}</section>`;
   async function compose() {
+    await loadLayouts();
     let kept = null; try { kept = JSON.parse(localStorage.getItem(draftKey) || 'null'); } catch { /* no storage */ }
     const restored = Boolean(kept && (kept.s || kept.x || kept.h)); st.last = 'eh-sub'; st.bodyMode = kept?.mode === 'html' ? 'html' : 'text';
-    main().innerHTML = head('Create email', `Write it here, see it as an inbox will, and save it as a draft in ${st.label}. Nothing goes out until you schedule it.`, '<button class="eh-btn eh-o eh-s" type="button" data-act="nav" data-page="campaigns">&larr; All campaigns</button>') + `<div class="eh-comp"><div class="eh-comp-l">
+    main().innerHTML = head('Create email', `Write it here, see it as an inbox will, and save it as a draft in ${st.label}. Nothing goes out until you schedule it.`, '<button class="eh-btn eh-o eh-s" type="button" data-act="nav" data-page="campaigns">&larr; All campaigns</button>') + kindTabs('text') + `<div class="eh-comp"><div class="eh-comp-l">
       ${restored ? '<p class="eh-flash" role="status" style="margin:0">Picked up where you left off. <button type="button" class="eh-link" data-act="fresh">Start a new one</button></p>' : ''}
       ${step(1, 'Who it is for', 'Everyone on your list, or one group.', '<div class="eh-field" style="margin:0"><label for="eh-to">Send to</label><select id="eh-to"><option value="">Everyone on your list</option></select><p class="eh-small" id="eh-to-n" style="margin:.5rem 0 0"></p></div>')}
       ${step(2, 'Subject and preview', 'The two lines a person reads before they open it.', `<div class="eh-field"><div class="eh-lab"><label for="eh-sub">Subject line</label><span class="eh-count" id="eh-sub-n"></span></div><input id="eh-sub" type="text" maxlength="150" autocomplete="off" style="font-size:calc(1.05rem*var(--eh-scale,1))"></div>
@@ -342,6 +348,78 @@ export function mountEmailHub(root, options = {}) {
       st.filter = 'draft'; st.open = d.campaign.id; st.mode = null; st.page = 'campaigns'; st.sub = ''; renderNav();
       await campaigns(); flash(`Saved as a draft in ${st.label}. Have a look, send yourself a test, then schedule it when you are happy.` + (d.warnings?.length ? ' Worth a look first: ' + d.warnings.join(' ') : ''));
     } catch (err) { say(msg, err.message, true); btn.disabled = false; }
+  }
+
+  /* ---- Create email from a host's layout (a show announcement): fields in, the whole email out ---- */
+  async function loadLayouts() {
+    if (st.layouts) return st.layouts;
+    try { st.layouts = await api('/layouts'); } catch { st.layouts = { enabled: false, layouts: [] }; }
+    return st.layouts;
+  }
+  /* "Write it" and each layout the host offers, as the first choice on Create. Nothing when there are none. */
+  const kindTabs = (current) => (st.layouts?.enabled && st.layouts.layouts.length
+    ? `<div class="eh-tabs" role="tablist" aria-label="What kind of email" style="margin:0 0 1rem"><button type="button" class="eh-btn eh-o eh-s" role="tab" data-act="kind" data-kind="text" aria-selected="${current === 'text'}">Write it</button>${st.layouts.layouts.map((l) => `<button type="button" class="eh-btn eh-o eh-s" role="tab" data-act="kind" data-kind="${esc(l.id)}" aria-selected="${current === l.id}">${esc(l.label)}</button>`).join('')}</div>`
+    : '');
+  const layoutValues = () => Object.fromEntries((st.lay?.def?.fields || []).map((f) => [f.key, $('#lf-' + f.key)?.value ?? '']));
+  async function composeLayout(layoutId, edit = null) {
+    await loadLayouts();
+    const def = st.layouts.layouts.find((x) => x.id === layoutId); if (!def) return compose();
+    st.lay = { id: layoutId, def, edit };
+    const v = edit?.values || {}, c = edit?.campaign || {};
+    const groups = [];
+    for (const f of def.fields) { const name = f.group || 'Details'; let g = groups.find((x) => x.name === name); if (!g) groups.push(g = { name, fields: [] }); g.fields.push(f); }
+    const opt = (f) => (f.required ? '' : ' <span class="eh-muted" style="text-transform:none;letter-spacing:0">(optional)</span>');
+    const input = (f) => `<div class="eh-field"><div class="eh-lab"><label for="lf-${esc(f.key)}">${esc(f.label)}${opt(f)}</label></div>${f.type === 'longtext'
+      ? `<textarea id="lf-${esc(f.key)}" rows="6" placeholder="${esc(f.placeholder)}">${esc(v[f.key] ?? '')}</textarea>`
+      : `<input id="lf-${esc(f.key)}" type="${f.type === 'url' ? 'url' : 'text'}" autocomplete="off" placeholder="${esc(f.placeholder)}" value="${esc(v[f.key] ?? '')}">`}${f.hint ? `<p class="eh-small eh-muted" style="margin:.3rem 0 0">${esc(f.hint)}</p>` : ''}</div>`;
+    let n = 0;
+    const lead = edit?.copied ? 'This is a copy, with every field already filled in. Change what is different, then save.' : edit ? 'Change any field. The design stays the same.' : (def.description || 'Fill in the details. The design is always the same.');
+    main().innerHTML = head(edit ? (edit.copied ? 'Change the copy' : 'Edit details') : def.label, lead, '<button class="eh-btn eh-o eh-s" type="button" data-act="nav" data-page="campaigns">&larr; All campaigns</button>') + (edit ? '' : kindTabs(layoutId)) + `<div class="eh-comp"><div class="eh-comp-l">
+      ${edit ? '' : step(++n, 'Who it is for', 'Everyone on your list, or one group.', '<div class="eh-field" style="margin:0"><label for="ly-to">Send to</label><select id="ly-to"><option value="">Everyone on your list</option></select><p class="eh-small" id="ly-to-n" style="margin:.5rem 0 0"></p></div>')}
+      ${step(++n, 'Subject and preview', 'The two lines a person reads before they open it.', `<div class="eh-field"><div class="eh-lab"><label for="ly-sub">Subject line</label></div><input id="ly-sub" type="text" maxlength="150" autocomplete="off" value="${esc(c.subject || '')}"></div>
+        <div class="eh-field"><div class="eh-lab"><label for="ly-pre">Preview text</label></div><input id="ly-pre" type="text" maxlength="150" autocomplete="off" placeholder="The line after the subject in an inbox" value="${esc(c.preview || '')}"></div>
+        <div class="eh-field" style="margin:0"><label for="ly-title">Name in ${esc(st.label)} <span class="eh-muted" style="text-transform:none;letter-spacing:0">(optional)</span></label><input id="ly-title" type="text" maxlength="100" autocomplete="off" value="${esc(c.title && c.title !== c.subject ? c.title : '')}"></div>`)}
+      ${groups.map((g) => step(++n, esc(g.name), '', g.fields.map(input).join(''))).join('')}
+      <div class="eh-row"><button class="eh-btn" type="button" data-act="save-layout">${edit ? 'Save changes' : `Save draft to ${esc(st.label)}`}</button><button class="eh-btn eh-o" type="button" data-act="nav" data-page="campaigns">Cancel</button><span class="eh-small eh-muted">Nothing is sent. You schedule it from Campaigns, after a look.</span></div><p class="eh-msg" id="eh-msg" role="status" aria-live="polite"></p></div>
+      <aside class="eh-comp-r" aria-label="Preview"><div class="eh-frame-box"><div class="eh-frame-head"><small>FROM ${esc((brandName || 'you').toUpperCase())}</small><b id="ly-fsub"></b></div><iframe id="ly-frame" class="eh-frame" sandbox="allow-same-origin" title="Preview of the email"></iframe></div></aside></div>`;
+    $('#ly-frame').addEventListener('load', () => { fit($('#ly-frame')); picturesNote($('#ly-frame')); });
+    layoutPreview(true);
+    if (edit) return;
+    const a = st.audience?.tags ? st.audience : await api('/audience').catch(() => null);
+    if (!$('#ly-to') || !a || a.connected === false) return;
+    st.audience = a; const o = (val, name, k) => `<option value="${val}" data-n="${k ?? ''}">${esc(name)}${k != null ? ` (${k})` : ''}</option>`;
+    $('#ly-to').innerHTML = o('', 'Everyone on your list', a.subscribers) + (a.tags?.length ? `<optgroup label="A tag">${a.tags.map((t) => o('t:' + t.id, t.name, t.count)).join('')}</optgroup>` : '') + (a.segments?.length ? `<optgroup label="A saved group">${a.segments.map((t) => o('s:' + t.id, t.name, t.count)).join('')}</optgroup>` : '');
+  }
+  /* The whole email, made by the host's layout on the server from what is typed so far. */
+  function layoutPreview(now = false) {
+    clearTimeout(st.lyT);
+    const run = async () => {
+      const fsub = $('#ly-fsub'); if (!fsub || !st.lay) return;
+      fsub.textContent = $('#ly-sub')?.value || 'Subject line';
+      try { const d = await api(`/layouts/${st.lay.id}/render`, { method: 'POST', body: JSON.stringify({ values: layoutValues() }) }); if ($('#ly-frame')) $('#ly-frame').srcdoc = d.html; }
+      catch (err) { if ($('#ly-frame')) $('#ly-frame').srcdoc = `<p style="font-family:sans-serif;padding:1rem">${esc(err.message)}</p>`; }
+    };
+    if (now) return run();
+    st.lyT = setTimeout(run, 350);
+  }
+  async function saveLayout(btn) {
+    const msg = $('#eh-msg'), edit = st.lay.edit; btn.disabled = true; say(msg, `Saving to ${st.label}…`);
+    try {
+      const base = { subject: $('#ly-sub').value, previewText: $('#ly-pre').value, title: $('#ly-title').value };
+      const d = edit
+        ? await api(`/campaigns/${edit.id}`, { method: 'PATCH', body: JSON.stringify({ ...base, layoutValues: layoutValues() }) })
+        : await api('/campaigns', { method: 'POST', body: JSON.stringify({ ...base, layout: st.lay.id, values: layoutValues(), to: $('#ly-to').value }) });
+      const id = d.campaign?.id || edit?.id;
+      const l = await api('/campaigns'); st.all = l.campaigns;
+      st.filter = 'draft'; st.open = id; st.mode = null; st.page = 'campaigns'; st.sub = ''; st.lay = null; renderNav();
+      await campaigns(); flash(edit ? 'Saved. Have a look at the preview below.' : `Saved as a draft in ${st.label}. Have a look, send yourself a test, then schedule it when you are happy.`);
+    } catch (err) { say(msg, err.message, true); btn.disabled = false; }
+  }
+  /* Opens a draft's fields for editing (from Review, or straight after Duplicate). */
+  async function editFields(id, copied = false) {
+    const lay = await api(`/campaigns/${id}/layout`); if (!lay.layout) throw new Error('That email has no fields to edit.');
+    let c = findEmail(id); if (!c) { const l = await api('/campaigns'); st.all = l.campaigns; c = findEmail(id); }
+    return composeLayout(lay.layout, { id, values: lay.values, campaign: c || {}, copied });
   }
 
   /* ---- Audience ---- */
@@ -460,6 +538,9 @@ export function mountEmailHub(root, options = {}) {
     if (a === 'filter') { st.filter = b.dataset.f; st.open = null; st.mode = null; return draw(false); }
     if (a === 'review') { st.open = st.open === b.dataset.id ? null : b.dataset.id; st.mode = null; return draw(false); }
     if (['m-preview', 'm-schedule', 'm-edit', 'm-test', 'm-delete', 'edit-save', 'test-send', 'dup', 'del', 'unsched', 'sched'].includes(a)) return act(a, b);
+    if (a === 'kind') return b.dataset.kind === 'text' ? compose() : composeLayout(b.dataset.kind);
+    if (a === 'save-layout') return saveLayout(b);
+    if (a === 'edit-fields') return editFields(b.dataset.id).catch((err) => flash(err.message));
     if (a === 'mode-x') { st.mode = null; return draw(false); }
     if (a === 'emoji') return insert(b.textContent);
     if (a === 'emoji-toggle') { const open = b.getAttribute('aria-expanded') !== 'true'; b.setAttribute('aria-expanded', String(open)); $('#eh-emoji-tray').classList.toggle('eh-hide', !open); return; }
@@ -515,6 +596,7 @@ export function mountEmailHub(root, options = {}) {
   root.addEventListener('input', (e) => {
     const id = e.target.id;
     if (['eh-sub', 'eh-pre', 'eh-title', 'eh-text', 'eh-html'].includes(id)) return preview();
+    if (id && (id.startsWith('lf-') || id === 'ly-sub')) return layoutPreview();
     if (id === 'eh-q') { st.q = e.target.value; return draw(false); }
     if (id === 'eh-when' || id === 'eh-ok') { const at = whenAt($('#eh-when').value), ok = Number.isFinite(at) && at >= Date.now() + st.sched.leadMinutes * 60000; $('#eh-when-note').textContent = Number.isFinite(at) ? (ok ? `It will go out ${when(new Date(at).toISOString())}.` : `Choose a time at least ${st.sched.leadMinutes} minutes from now.`) : ''; $('#eh-sched').disabled = !(ok && $('#eh-ok').checked); return; }
     if (id === 'lk-w') { st.lookDraft.logoWidth = Number(e.target.value); $('#lk-wn').textContent = e.target.value; return lookPreview(); }

@@ -10,6 +10,8 @@
  *            seven colors, a logo, a footer line. A NULL column means the default.
  *   logo     logos uploaded for that look. The bytes live in the host's object storage under `object_key`;
  *            this table is the list, so nothing has to page through a bucket.
+ *   layout   the field values behind an email made from a host's layout (a show announcement), one row per email,
+ *            so a draft can be edited or duplicated by changing fields, not HTML.
  *   archive  sent emails carried over from a provider that is gone or replaced (subject, date, figures and
  *            the HTML as sent), read-only, so the history outlives the account it came from.
  */
@@ -47,6 +49,18 @@ export const tables = [
       created_at: 'created_at'
     },
     indexes: [{ columns: 'id', primary: true }]
+  },
+  {
+    name: 'engine9_email_hub_layout',
+    columns: {
+      id: 'id',
+      campaign_id: { type: 'string', nullable: false, description: 'The provider\'s id for the email these values made' },
+      layout: { type: 'string', nullable: false, description: 'Which host layout (its id) the values belong to' },
+      values_json: { type: 'text', nullable: false, description: 'The field values, as JSON' },
+      created_at: 'created_at',
+      modified_at: 'modified_at'
+    },
+    indexes: [{ columns: 'id', primary: true }, { columns: ['campaign_id'], unique: true }]
   },
   {
     name: 'engine9_email_hub_archive',

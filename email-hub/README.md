@@ -163,6 +163,34 @@ for a finished email from a designer or an email builder. `POST /campaigns` take
   frame as everything else.
 - The service cleans it again on its side; this is a second lock, not the only one.
 
+## Emails made from a layout (a show announcement)
+
+A host that sends the same kind of email again and again (a show announcement) can give the hub a **layout**: the fields a
+person fills in, and a function that makes the whole email from them. Create email then offers it beside "Write it", and the
+design is always the same.
+
+```js
+createEmailHub({ provider, store, layouts: { show: {
+  label: 'New show', description: 'The show announcement.',
+  fields: [{ key: 'title', label: 'Show title', type: 'text', group: 'The show', placeholder: 'Cluelesque', required: true }, ...],
+  render: (values, { style, mergeTags, brand, siteUnsubscribe }) => '<html>…</html>'   // escapes the values itself
+} }, layoutTemplateId: '123' });
+```
+
+- Field types: `text`, `longtext`, `url` (https only). Every value is clipped and checked before `render` sees it, and only declared
+  fields get through. The output must carry the service's unsubscribe tag (`mergeTags.unsubscribe`) or it is not saved.
+- A layout email is made with `POST /campaigns { layout, values, subject, to }`. Its values are kept in
+  `engine9_email_hub_layout` (one row per email), so a draft is changed by editing fields (`PATCH /campaigns/:id { layoutValues }`,
+  which re-makes the whole email) and never by editing HTML. `GET /campaigns/:id/layout` returns them; `POST /layouts/:id/render`
+  is the live preview of a half-filled form.
+- **Duplicate** copies the email and its values, and the screens open the copy with every field already filled in.
+- Needs a `store` with a database (`createD1Store`), a provider whose `capabilities.layouts` is true (Kit and the memory provider),
+  and the table: `migrate-3.15.0.sql` on a host that does not let core install it. Otherwise layouts are simply not offered.
+- `layoutTemplateId` is the service-side template such emails are sent in (Kit wraps every broadcast in one). Give it a template
+  that does nothing but hold the message, so the layout's own design is not wrapped in a second one.
+- **Duplicate keeps the template**: the Kit adapter now copies the original's `email_template_id`, so a copy is sent in the same
+  design as the original (it used to fall back to the account's default template).
+
 ## Options a host may set
 
 Everything below is optional and defaults to the neutral behavior, so a site that sets none of it is unchanged.
@@ -214,6 +242,7 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 
 ## Version history
 
+- **3.15.0**: Layouts (`layouts.js`): `layouts` and `layoutTemplateId` options, Create email offers "New show"-style layouts beside "Write it", a live preview, editing a draft by its fields, and Duplicate opening the copy with every field filled in. New table `engine9_email_hub_layout` (`migrate-3.15.0.sql`; additive). `capabilities.layouts` (Kit, memory). Kit: a duplicate keeps the original's template; `createCampaign` takes `templateId`; `updateCampaign` takes `html`.
 - **3.14.0**: The review explains missing pictures in the preview (the host's `img-src` rule) and the README says how to fix it. Paste HTML (`pasted.js`): Create email can take a finished email as HTML, cleaned and checked (must have the unsubscribe tag), sent as pasted. `GET /config` adds `mergeTags`; `POST /campaigns` accepts `html` and may return `warnings`. Additive; no schema change.
 - **3.13.0**: Home and Analytics email figures (sends, open rate, click rate) fall back to the archived emails from a previous provider for any period in which the service has sent nothing of its own, with a note saying so; the service's own figures are the only ones used as soon as it has sends in that period. `overview` marks such a period `fromArchive`. No schema change.
 - **3.12.2**: Touch screens: text-link buttons and the logo delete button get a finger-sized tap area (CSS only).

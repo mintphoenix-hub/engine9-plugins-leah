@@ -64,7 +64,7 @@ export function capabilitiesOf(p) {
   const c = {
     checklist: has('sendChecklist'), test: has('sendTest'), report: has('campaignReport'),
     contacts: has('listContacts', 'contact'), tags: has('createTag', 'tagContact'), segments: true, fields: has('fields'),
-    import: has('importContacts'), editDesign: has('editUrl'), templates: has('listTemplates'), look: true
+    import: has('importContacts'), editDesign: has('editUrl'), templates: has('listTemplates'), look: true, layouts: false
   };
   return { ...c, ...(p.capabilities || {}) };
 }

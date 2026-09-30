@@ -37,7 +37,7 @@ const call = (hub, method, path, body, form) => hub.handle(new Request('https://
 
 console.log('the database store');
 {
-  assert.deepEqual(Object.keys(tableNames()), ['style', 'logo', 'archive']); assert.ok(Object.values(tableNames()).every((t) => t.startsWith('engine9_email_hub_')));
+  assert.deepEqual(Object.keys(tableNames()), ['style', 'logo', 'archive', 'layout']); assert.ok(Object.values(tableNames()).every((t) => t.startsWith('engine9_email_hub_')));
   const T = tableNames();
   const db = open(), images = bucket();
   const store = createD1Store({ db, images, publicLogoBase: BASE, builtIn: BUILT });

@@ -123,7 +123,7 @@ export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, 
   return {
     label: 'Kit',
     mergeTags: { address: '{{ address }}', unsubscribe: '{{ unsubscribe_url }}', email: '{{ subscriber.email_address }}' },
-    capabilities: { import: false, checklist: false, test: false },
+    capabilities: { import: false, checklist: false, test: false, layouts: true },
     connected: () => Boolean(key),
     appUrl: (path = '/') => `${appUrl}${path === '/' ? '' : path}`,
     editUrl: (c) => c.editUrl,
@@ -158,8 +158,8 @@ export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, 
       const s = statsOf(await kit(`/broadcasts/${id(cid)}/stats`));
       return { recipients: s.recipients, opened: s.opened, openRate: s.openRate, clicked: s.clicked, clickRate: s.clickRate, unsubscribed: s.unsubscribes, bounced: null };
     }),
-    createCampaign: guard(async ({ subject, previewText, title, html, to }) => {
-      const d = await kit('/broadcasts', { method: 'POST', body: { subject, preview_text: previewText || '', description: title || subject, content: html || '', public: false, send_at: null, subscriber_filter: filter(to) } });
+    createCampaign: guard(async ({ subject, previewText, title, html, to, templateId }) => {
+      const d = await kit('/broadcasts', { method: 'POST', body: { subject, preview_text: previewText || '', description: title || subject, content: html || '', public: false, send_at: null, subscriber_filter: filter(to), ...(templateId ? { email_template_id: Number(templateId) || templateId } : {}) } });
       return shape(d?.broadcast || {});
     }),
     updateCampaign: guard(async (cid, f) => {
@@ -167,6 +167,7 @@ export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, 
       if (f.subject !== undefined) body.subject = f.subject;
       if (f.previewText !== undefined) body.preview_text = f.previewText;
       if (f.title !== undefined) body.description = f.title;
+      if (f.html !== undefined) body.content = f.html;
       return shape((await kit(`/broadcasts/${id(cid)}`, { method: 'PUT', body }))?.broadcast || {});
     }),
     deleteCampaign: guard(async (cid) => { await kit(`/broadcasts/${id(cid)}`, { method: 'DELETE' }); return {}; }),
@@ -174,7 +175,9 @@ export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, 
       const b = (await kit(`/broadcasts/${id(cid)}`))?.broadcast || {};
       const made = await kit('/broadcasts', { method: 'POST', body: {
         subject: b.subject || '', preview_text: b.preview_text || '', description: `${b.description || b.subject || 'Copy'} (copy)`.slice(0, 200),
-        content: b.content || '', public: false, send_at: null, subscriber_filter: Array.isArray(b.subscriber_filter) ? b.subscriber_filter : []
+        content: b.content || '', public: false, send_at: null, subscriber_filter: Array.isArray(b.subscriber_filter) ? b.subscriber_filter : [],
+        // The copy keeps the design: without this Kit would send it in the account's default template, not the original's.
+        ...(b.email_template?.id ? { email_template_id: b.email_template.id } : {})
       } });
       return shape(made?.broadcast || {});
     }),

@@ -3,7 +3,7 @@
   in a browser, a Worker and Node.
 */
 
-const BASE_TABLES = ['style', 'logo', 'archive'];
+const BASE_TABLES = ['style', 'logo', 'archive', 'layout'];
 
 /* The deployed table names. Every table is self-scoped with the stem `engine9_email_hub_` and the plugin sets
    no metadata.prefix, so core's plugin.table_prefix is empty and these names are final. Keyed by the short name:

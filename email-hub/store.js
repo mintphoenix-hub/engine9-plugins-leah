@@ -43,6 +43,23 @@ export function createD1Store({ db, images = null, publicLogoBase = '', builtIn 
     },
     async resetStyle() { await db.prepare(`DELETE FROM ${T.style} WHERE slug = ?`).bind('house').run(); },
 
+    /* ---- the field values behind an email made from a host layout (layouts.js) */
+    async getLayout(campaignId) {
+      const row = await db.prepare(`SELECT layout, values_json FROM ${T.layout} WHERE campaign_id = ?`).bind(String(campaignId)).first();
+      if (!row) return null;
+      try { return { layout: row.layout, values: JSON.parse(row.values_json) }; } catch { return null; }
+    },
+    async saveLayout(campaignId, layout, values) {
+      await db.prepare(`INSERT OR IGNORE INTO ${T.layout} (campaign_id, layout, values_json) VALUES (?, ?, ?)`).bind(String(campaignId), String(layout), JSON.stringify(values)).run();
+      await db.prepare(`UPDATE ${T.layout} SET layout = ?, values_json = ?, modified_at = datetime('now') WHERE campaign_id = ?`).bind(String(layout), JSON.stringify(values), String(campaignId)).run();
+    },
+    /* A duplicate is the same fields under the new email's id. */
+    async copyLayout(fromId, toId) {
+      const one = await this.getLayout(fromId);
+      if (one) await this.saveLayout(toId, one.layout, one.values);
+    },
+    async deleteLayout(campaignId) { await db.prepare(`DELETE FROM ${T.layout} WHERE campaign_id = ?`).bind(String(campaignId)).run(); },
+
     /* ---- logos: the built-in ones, then the uploads, newest first */
     async logos() {
       const { results } = await db.prepare(`SELECT id, name, object_key, bytes FROM ${T.logo} ORDER BY created_at DESC`).all();

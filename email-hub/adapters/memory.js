@@ -25,7 +25,7 @@ export function createMemoryProvider({ now = () => Date.now() } = {}) {
   const p = {
     label: 'Memory',
     mergeTags: { address: '{{ address }}', unsubscribe: '{{ unsubscribe_url }}', email: '{{ email }}' },
-    capabilities: {},
+    capabilities: { layouts: true },
     connected: () => true,
     appUrl: () => 'https://memory.invalid/',
     editUrl: () => null,
@@ -46,7 +46,7 @@ export function createMemoryProvider({ now = () => Date.now() } = {}) {
     getCampaign: async (id) => shape(camp(id)),
     campaignContent: async (id) => ({ html: camp(id).html || '', text: '' }),
     createCampaign: async ({ subject, previewText, title, html, to }) => { const id = nid(); const c = { id, status: 'save', subject, preview: previewText || '', title: title || subject, html: html || '', to: to || {}, created: iso() }; campaigns.set(id, c); return shape(c); },
-    updateCampaign: async (id, f) => { const c = camp(id); if (f.subject !== undefined) c.subject = f.subject; if (f.previewText !== undefined) c.preview = f.previewText; if (f.title !== undefined) c.title = f.title; return shape(c); },
+    updateCampaign: async (id, f) => { const c = camp(id); if (f.subject !== undefined) c.subject = f.subject; if (f.previewText !== undefined) c.preview = f.previewText; if (f.title !== undefined) c.title = f.title; if (f.html !== undefined) c.html = f.html; return shape(c); },
     deleteCampaign: async (id) => { camp(id); campaigns.delete(String(id)); return {}; },
     duplicateCampaign: async (id) => { const s = camp(id); const n = nid(); const c = { ...s, id: n, status: 'save', when: null, sent: null, openRate: null, clickRate: null, created: iso(), title: `${s.title} (copy)` }; campaigns.set(n, c); return shape(c); },
     schedule: async (id, at) => { const c = camp(id); c.status = 'schedule'; c.when = at; return {}; },

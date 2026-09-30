@@ -9,6 +9,7 @@
   scheduling is guarded (schedule.js), only a draft can change or go, and a test send goes only to the addresses given.
 */
 import { pickTemplate, renderTemplate } from './templates.js';
+import { checkLayouts, listLayouts, cleanValues, renderLayout } from './layouts.js';
 import { assertProvider, capabilitiesOf, HubError } from './provider.js';
 import { planSchedule, isDraft, scheduleRules } from './schedule.js';
 import { bodyHtml, checkStyle, defaultStyle, StyleError } from './shell.js';
@@ -28,9 +29,10 @@ export function parseTo(to) {
   return m[1] === 't' ? { tagId: m[2] } : { segmentId: m[2] };
 }
 
-const ROUTE = /^\/(campaigns|audience|overview|contacts|tags|fields|import|look|config|templates)(?:\/([A-Za-z0-9_-]+))?(?:\/(content|duplicate|schedule|unschedule|test|checklist|report|tags|unsubscribe))?$/;
+const ROUTE = /^\/(campaigns|audience|overview|contacts|tags|fields|import|look|config|templates|layouts)(?:\/([A-Za-z0-9_-]+))?(?:\/(content|duplicate|schedule|unschedule|test|checklist|report|tags|unsubscribe|render|layout))?$/;
 
-export function createEmailHub({ provider, brand = {}, store = null, now = () => Date.now(), schedule = {}, people = null, templates = null, defaultTemplate = '' } = {}) {
+export function createEmailHub({ provider, brand = {}, store = null, now = () => Date.now(), schedule = {}, people = null, templates = null, defaultTemplate = '', layouts = null, layoutTemplateId = '' } = {}) {
+  checkLayouts(layouts);
   const rules = scheduleRules(schedule);
   assertProvider(provider);
   const caps = capabilitiesOf(provider);
@@ -47,12 +49,37 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
     return c;
   };
 
+  /* What a host layout's render() is given. */
+  const layoutCtx = async () => ({ style: await loadStyle(), mergeTags: provider.mergeTags, brand, siteUnsubscribe: unsubscribeLink(brand.unsubscribePage, provider) || '' });
+  const layoutsOn = () => Boolean(layouts && Object.keys(layouts).length && caps.layouts && store?.saveLayout);
+
+  async function layoutRoutes(request, method, id, action) {
+    if (!id && method === 'GET') return json(200, { enabled: layoutsOn(), layouts: layoutsOn() ? listLayouts(layouts) : [] });
+    const lay = id && layouts?.[id];
+    if (!lay) throw new HubError('There is no such layout.', 404);
+    if (action === 'render' && method === 'POST') {          // a live preview of a form half filled in
+      const values = cleanValues(lay, (await readBody(request)).values, { partial: true });
+      const style = await loadStyle();
+      const html = renderLayout(lay, values, await layoutCtx(), { check: false });
+      return json(200, { html: renderTemplate(html, { message: '', address: style.address || brand.address || 'Your postal address' }) });
+    }
+    return json(405, { error: 'That is not something we do.' });
+  }
+
   async function campaigns(request, method, id, action) {
     if (!id && method === 'GET') return json(200, { connected: true, ...(await provider.listCampaigns()) });
     if (!id && method === 'POST') {
       const b = await readBody(request);
       const subject = clip(b.subject, 150).trim();
       if (!subject) throw new HubError('An email needs a subject line.');
+      if (b.layout) {                                                // made from a host layout: fields in, whole email out
+        const lay = layouts?.[b.layout];
+        if (!lay || !layoutsOn()) throw new HubError('That kind of email is not switched on here.', 404);
+        const values = cleanValues(lay, b.values);
+        const made = await provider.createCampaign({ subject, previewText: clip(b.previewText, 150).trim(), title: clip(b.title, 100).trim(), html: renderLayout(lay, values, await layoutCtx()), to: parseTo(b.to), ...(layoutTemplateId ? { templateId: layoutTemplateId } : {}) });
+        await store.saveLayout(made.id, b.layout, values);
+        return json(200, { campaign: made });
+      }
       let html, warnings = [];
       if (typeof b.html === 'string' && b.html.trim()) {            // pasted HTML: cleaned and checked, then sent as it is
         html = cleanEmailHtml(b.html);
@@ -75,10 +102,19 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
         if (typeof b.subject === 'string') { if (!b.subject.trim()) throw new HubError('An email needs a subject line.'); f.subject = clip(b.subject, 150).trim(); }
         if (typeof b.previewText === 'string') f.previewText = clip(b.previewText, 150).trim();
         if (typeof b.title === 'string' && b.title.trim()) f.title = clip(b.title, 100).trim();
+        if (b.layoutValues && typeof b.layoutValues === 'object') {   // the fields of an email made from a layout: re-render the whole email
+          const kept = layoutsOn() ? await store.getLayout(id) : null, lay = kept && layouts[kept.layout];
+          if (!lay) throw new HubError('That email was not made from a layout, so it has no fields to edit.', 409);
+          const values = cleanValues(lay, b.layoutValues);
+          f.html = renderLayout(lay, values, await layoutCtx());
+          const campaign = await provider.updateCampaign(id, f);
+          await store.saveLayout(id, kept.layout, values);
+          return json(200, { campaign });
+        }
         if (!Object.keys(f).length) throw new HubError('Nothing to change.');
         return json(200, { campaign: await provider.updateCampaign(id, f) });
       }
-      if (method === 'DELETE') { const c = await draftOnly(id, 'delete it'); await provider.deleteCampaign(id); return json(200, { ok: true, id: c.id }); }
+      if (method === 'DELETE') { const c = await draftOnly(id, 'delete it'); await provider.deleteCampaign(id); try { await store?.deleteLayout?.(id); } catch { /* the values are only useful with the email */ } return json(200, { ok: true, id: c.id }); }
     }
     if (id && action === 'content' && method === 'GET') {
       const c = await provider.campaignContent(id);
@@ -89,7 +125,15 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
     }
     if (id && action === 'report' && method === 'GET') { need('report'); return json(200, await provider.campaignReport(id)); }
     if (id && action === 'checklist' && method === 'GET') { need('checklist'); return json(200, await provider.sendChecklist(id)); }
-    if (id && action === 'duplicate' && method === 'POST') return json(200, { campaign: await provider.duplicateCampaign(id) });
+    if (id && action === 'layout' && method === 'GET') {
+      const one = layoutsOn() ? await store.getLayout(id) : null;
+      return json(200, one && layouts[one.layout] ? { layout: one.layout, values: one.values, label: layouts[one.layout].label } : { layout: null });
+    }
+    if (id && action === 'duplicate' && method === 'POST') {
+      const made = await provider.duplicateCampaign(id);
+      try { await store?.copyLayout?.(id, made.id); } catch { /* the copy is still a good email, only its fields are not editable */ }   // the copy keeps the fields, so it can be changed by editing them
+      return json(200, { campaign: made });
+    }
     if (id && action === 'schedule' && method === 'POST') {
       const b = await readBody(request);
       const plan = planSchedule(b.sendAt, b.confirm, now(), rules);
@@ -214,6 +258,7 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
       }
       if (area === 'overview' && method === 'GET') return json(200, await overview());
       if (area === 'audience' && method === 'GET' && !id) return json(200, { connected: true, ...(await provider.audience()) });
+      if (area === 'layouts') return await layoutRoutes(request, method, id, sub);
       if (area === 'campaigns') return await campaigns(request, method, id, sub);
       if (area === 'contacts') return await contacts(request, url, method, id, sub);
       if (area === 'tags' && method === 'POST') { need('tags'); const n = clip((await readBody(request)).name, 100).trim(); if (!n) throw new HubError('Give the tag a name.'); return json(200, await provider.createTag(n)); }
