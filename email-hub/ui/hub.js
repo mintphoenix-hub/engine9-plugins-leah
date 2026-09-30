@@ -184,10 +184,10 @@ export function mountEmailHub(root, options = {}) {
       : c.recipients != null ? `<p class="eh-small eh-muted" style="margin-top:.9rem">Would reach about <strong style="font-weight:500;color:var(--eh-ink)">${num(c.recipients)}</strong> people today</p>` : '';
     const items = c.archive ? [['m-preview', 'Preview']] : [['m-preview', 'Preview'], k === 'draft' && ['m-schedule', 'Schedule…'], k === 'scheduled' && ['unsched', 'Unschedule'], k === 'draft' && ['m-edit', 'Edit details…'], st.caps.test && ['m-test', 'Send a test…'], ['dup', 'Duplicate'], k === 'draft' && ['m-delete', 'Delete draft', 1], k === 'sent' && st.caps.report && ['report', 'View report']].filter(Boolean);
     return `<li class="eh-rowx k-${k}${open ? ' eh-open' : ''}"><div class="eh-rowx-top"><div class="eh-rowx-main"><span class="eh-sicon ${k}" aria-hidden="true">${svg(ICON[k])}</span><div class="eh-rowx-body">
-      <button type="button" class="eh-subj" data-act="${k === 'sent' && st.caps.report && !c.archive ? 'report' : 'review'}" data-id="${id}">${esc(name)}</button>
+      <button type="button" class="eh-subj" data-act="${k === 'sent' && (c.archive || st.caps.report) ? 'report' : 'review'}" data-id="${id}">${esc(name)}</button>
       <p class="eh-facts">${tag(c)}${c.archive ? `<span class="eh-src" title="Kept from ${esc(c.source)}, read-only">${esc(c.source)}</span>` : ''}<span>${esc(dateLine)}</span>${c.title && c.title !== c.subject ? `<span>${esc(c.title)}</span>` : ''}${c.archive ? '' : `<span>${c.segment ? 'To one group' : 'To everyone'}</span>`}</p>
       ${c.preview ? `<p class="eh-prev" title="${esc(c.preview)}">${esc(c.preview)}</p>` : ''}${strip}</div></div>
-      <div class="eh-rowx-side">${k === 'sent' && st.caps.report && !c.archive ? `<button type="button" class="eh-btn eh-o eh-s" data-act="report" data-id="${id}">View report</button>` : `<button type="button" class="eh-btn eh-o eh-s" data-act="review" data-id="${id}" aria-expanded="${open}">${open ? 'Close' : 'Review'}</button>`}
+      <div class="eh-rowx-side">${k === 'sent' && (c.archive || st.caps.report) ? `<button type="button" class="eh-btn eh-o eh-s" data-act="report" data-id="${id}">View report</button>` : `<button type="button" class="eh-btn eh-o eh-s" data-act="review" data-id="${id}" aria-expanded="${open}">${open ? 'Close' : 'Review'}</button>`}
       <div class="eh-menu"><button type="button" class="eh-more" data-act="menu" data-id="${id}" aria-haspopup="menu" aria-expanded="false" aria-label="More for ${esc(name)}">&#8943;</button><ul class="eh-menu-list eh-hide" role="menu">${items.map(([a, l, dg]) => `<li role="none"><button type="button" role="menuitem" data-act="${a}" data-id="${id}"${dg ? ' class="eh-dangerous"' : ''}>${l}</button></li>`).join('')}${c.editUrl ? `<li role="none"><a role="menuitem" href="${esc(c.editUrl)}" target="_blank" rel="noopener">Open in ${esc(st.label)} &#8599;</a></li>` : ''}</ul></div></div></div>
       ${open ? `<div class="eh-panel">${panel(c, k)}</div>` : ''}</li>`;
   }
@@ -254,11 +254,16 @@ export function mountEmailHub(root, options = {}) {
   /* ---- one sent email's report ---- */
   async function report() {
     if (!st.all.length) { const d = await api('/campaigns'); st.all = d.campaigns || []; st.dc = d.dc || st.dc; }
-    const c = st.all.find((x) => x.id === st.reportId);
+    const c = findEmail(st.reportId);
     main().innerHTML = head(c ? (c.subject || c.title || 'Email') : 'Email report', c ? (kindOf(c) === 'sent' ? `Sent ${when(c.when)}` : kindOf(c) === 'scheduled' ? `Goes out ${when(c.when)}` : `Draft started ${short(c.created)}`) : '', `<button class="eh-btn eh-o eh-s" type="button" data-act="nav" data-page="campaigns">&larr; All campaigns</button>${c?.editUrl ? `<a class="eh-btn eh-o eh-s" href="${esc(c.editUrl)}" target="_blank" rel="noopener">Open in ${esc(st.label)}</a>` : ''}`) +
       (c ? `<div class="eh-grid"><div class="eh-card"><h3>Report</h3><div id="eh-rep" class="eh-stats"><span class="eh-muted">Loading…</span></div></div><div class="eh-card"><h3>The email</h3><div class="eh-frame-box"><iframe class="eh-frame" sandbox="allow-same-origin" title="The email" data-frame="${esc(c.id)}"></iframe></div></div></div>` : '<p class="eh-muted">That email is not in your account any more.</p>');
     if (!c) return;
     loadPreview(c.id);
+    if (c.archive) { /* kept from a previous provider: the headline figures are all that came with it */
+      $('#eh-rep').innerHTML = stat('Sent to', num(c.sent)) + stat('Opened', pct(c.openRate), c.stats?.opened != null ? `${num(c.stats.opened)} people` : '') + stat('Clicked', num(c.stats?.clicked), c.clickRate != null ? `${pct(c.clickRate)} click rate` : '')
+        + `<p class="eh-small eh-muted" style="grid-column:1/-1;margin:.6rem 0 0">Kept from ${esc(String(c.source).replace(/^./, (x) => x.toUpperCase()))}, read-only. Only these headline figures were carried over, so there is no breakdown by link, no unsubscribe or bounce counts and no open timeline for this email.${c.audience ? ` Sent to: ${esc(c.audience)}${c.segment ? `, ${esc(c.segment)}` : ''}.` : ''}</p>`;
+      return;
+    }
     if (kindOf(c) !== 'sent') { $('#eh-rep').innerHTML = '<span class="eh-muted">Figures appear once the email has gone out.</span>'; return; }
     try { const r = await api(`/campaigns/${c.id}/report`); $('#eh-rep').innerHTML = stat('Recipients', num(r.recipients)) + stat('Opened', pct(r.openRate), r.opened != null ? `${num(r.opened)} people` : '') + stat('Clicked', num(r.clicked), r.clickRate != null ? `${pct(r.clickRate)} click rate` : '') + stat('Unsubscribed', num(r.unsubscribed)) + stat('Bounced', num(r.bounced)); }
     catch { $('#eh-rep').innerHTML = stat('Recipients', num(c.sent)) + stat('Opened', pct(c.openRate)) + stat('Clicked', pct(c.clickRate)); }
