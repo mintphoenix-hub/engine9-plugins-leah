@@ -223,3 +223,8 @@
 .eh-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 .eh-src{display:inline-block;font-size:calc(.62rem*var(--eh-scale,1));letter-spacing:.14em;text-transform:uppercase;padding:.25em .7em;border-radius:var(--eh-radius);border:1px dashed var(--eh-soft);color:var(--eh-soft)}
+/* Touch screens only: small controls get a finger-sized tap area, and look the same on a desktop. */
+@media (pointer:coarse){
+  .eh-link{display:inline-flex;align-items:center;min-height:2.6rem}
+  .eh-logo-x{width:2.4rem;height:2.4rem}
+}

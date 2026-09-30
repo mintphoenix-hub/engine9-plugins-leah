@@ -186,6 +186,7 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 
 ## Version history
 
+- **3.12.2**: Touch screens: text-link buttons and the logo delete button get a finger-sized tap area (CSS only).
 - **3.12.1**: Archived emails (kept from a previous provider) get a "View report" page: the figures that were kept (sent to, opened, clicked) beside the email, with a note that no link, unsubscribe or bounce breakdown came with them. UI only.
 - **3.12.0**: `templates` and `defaultTemplate` options (`templates.js`): a draft's review shows the designed email by dropping its message into a copy of the service's template. `campaignContent()` may return `template` (a name); the Kit adapter does. Additive; no schema change.
 - **3.11.4**: A draft's review shows a note when the provider's copy is only the message text (Kit keeps the design in its template, which its API cannot return), and drafts get a "Preview the full design in Kit" button that opens that draft in Kit. No schema change.
