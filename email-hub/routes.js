@@ -287,7 +287,8 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
         // designed email is previewed around a sample of that email), else the host's general sample, else one plain sentence.
         const pick = typeof templateSample === 'function' ? templateSample(found.name, { style, address }) : (templateSample && typeof templateSample === 'object' ? templateSample[found.name] : templateSample);
         const message = (typeof pick === 'function' ? pick({ style, address }) : pick) || '<p style="font-family:Helvetica,Arial,sans-serif;font-size:17px;line-height:1.7;margin:0;">Your message appears here.</p>';
-        const html = copy ? renderTemplate(copy.html, { message, address }) : null;
+        // Two passes: the second fills the merge tags the message itself carries (its address line, its unsubscribe links).
+        const html = copy ? renderTemplate(renderTemplate(copy.html, { message, address }), { message: '', address }) : null;
         // `bare`: what is shown has no background of its own, so it is a few words on a plain page. The screens then say so.
         return json(200, { name: found.name, isDefault: Boolean(found.isDefault), url: found.url || null, bare: Boolean(html && !/background|bgcolor/i.test(html)), html });
       }

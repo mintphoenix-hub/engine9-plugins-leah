@@ -264,6 +264,7 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 
 ## Version history
 
+- **3.17.0**: Layouts are listed as templates: Content -> Templates has a "Made from fields" section (New show and the like) with Preview (a layout may carry `sample` values) and "Use for a new email". A preview also fills the merge tags the sample message itself carries, so no raw `{{ }}` shows. No schema change.
 - **3.16.3**: `templateSample` may be an object keyed by template name (or a function of the name), so a template that holds a whole designed email is previewed around a sample of that email, not one plain sentence. The preview is marked `bare` only when what it shows has no background of its own. No schema change.
 - **3.16.2**: Phone layout: a row of tabs (for example Audience's Subscribed / Unsubscribed / Bounced / Not confirmed filter) wraps instead of scrolling sideways, so no tab is hidden off the edge; sliders get a finger-sized height on touch screens. CSS only.
 - **3.16.1**: Template previews say plainly when they are only the message (a template that just wraps it, or one with no copy on the host): the same note and "Preview the full design in Kit" button the draft review has, instead of a few words on a white box. `GET /templates/:id/preview` adds `url` and `bare`; the Kit `listTemplates` returns each template's address in Kit. UI only, no schema change.

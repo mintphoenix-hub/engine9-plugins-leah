@@ -8,6 +8,7 @@
     createEmailHub({ layouts: { show: {
       label: 'New show', description: 'The show announcement.',
       fields: [{ key: 'title', label: 'Show title', type: 'text', group: 'The show', placeholder: 'Cluelesque', required: true }, ...],
+      sample: { title: 'Cluelesque', … },                            // optional: filled-in values, to preview the design in Content -> Templates
       render: (values, { style, mergeTags, brand }) => '<html>…</html>'   // the whole email, escaping the values itself
     } } })
 
@@ -39,7 +40,7 @@ export function checkLayouts(layouts) {
 /* What the screens need: no functions. */
 export function listLayouts(layouts) {
   return Object.entries(layouts || {}).map(([id, l]) => ({
-    id, label: l.label, description: l.description || '',
+    id, label: l.label, description: l.description || '', sample: l.sample && typeof l.sample === 'object' ? l.sample : null,
     fields: l.fields.map((f) => ({ key: f.key, label: f.label || f.key, type: f.type || 'text', group: f.group || '', hint: f.hint || '', placeholder: f.placeholder || '', required: Boolean(f.required) }))
   }));
 }

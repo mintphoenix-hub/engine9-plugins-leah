@@ -296,6 +296,7 @@ export function mountEmailHub(root, options = {}) {
   const step = (n, title, hint, inner) => `<section class="eh-step"><div class="eh-step-h"><span class="eh-stepn" aria-hidden="true">${n}</span><div><h3>${title}</h3>${hint ? `<p>${hint}</p>` : ''}</div></div>${inner}</section>`;
   async function compose() {
     await Promise.all([loadLayouts(), loadTemplates()]);
+    if (st.newKind) { const k = st.newKind; st.newKind = ''; return composeLayout(k); }
     let kept = null; try { kept = JSON.parse(localStorage.getItem(draftKey) || 'null'); } catch { /* no storage */ }
     const restored = Boolean(kept && (kept.s || kept.x || kept.h)); st.last = 'eh-sub'; st.bodyMode = kept?.mode === 'html' ? 'html' : 'text';
     main().innerHTML = head('Create email', `Write it here, see it as an inbox will, and save it as a draft in ${st.label}. Nothing goes out until you schedule it.`, '<button class="eh-btn eh-o eh-s" type="button" data-act="nav" data-page="campaigns">&larr; All campaigns</button>') + kindTabs('text') + `<div class="eh-comp"><div class="eh-comp-l">
@@ -369,6 +370,10 @@ export function mountEmailHub(root, options = {}) {
     : '');
   /* The template opened in the service itself, where its full design can be previewed. */
   const tplLink = (d) => (d?.url ? `<p style="margin:.7rem 0 0"><a class="eh-btn eh-o eh-s" href="${esc(d.url)}" target="_blank" rel="noopener">Preview the full design in ${esc(st.label)} &#8599;</a></p>` : '');
+  /* Designs a host made from fields (a show announcement) are templates too: listed beside the service's own, with a preview and "use". */
+  const layoutRows = () => (st.layouts?.enabled && st.layouts.layouts.length
+    ? `<h4 style="margin:1.1rem 0 .2rem;font-size:calc(.8rem*var(--eh-scale,1));letter-spacing:.14em;text-transform:uppercase" class="eh-muted">Made from fields</h4><ul class="eh-tpls">${st.layouts.layouts.map((l) => `<li><span class="eh-tpl-name">${esc(l.label)} <span class="eh-tag">Fields</span>${l.description ? `<span class="eh-small eh-muted" style="flex-basis:100%">${esc(l.description)}</span>` : ''}</span><span class="eh-row">${l.sample ? `<button type="button" class="eh-btn eh-o eh-s" data-act="lay-preview" data-id="${esc(l.id)}">Preview</button>` : ''}<button type="button" class="eh-btn eh-o eh-s" data-act="lay-use" data-id="${esc(l.id)}">Use for a new email</button></span></li>`).join('')}</ul>`
+    : '');
   const templateBox = (c) => `<div class="eh-box"><div class="eh-field"><label for="tp-sel">Design this email is sent in</label><select id="tp-sel">${(st.tpls || []).map((t) => `<option value="${esc(t.id)}"${String(t.id) === String(st.tplOf?.[c.id]) ? ' selected' : ''}>${esc(t.name)}${t.isDefault ? ' (default)' : ''}</option>`).join('')}</select></div><div class="eh-row"><button class="eh-btn eh-s" type="button" data-act="tpl-save" data-id="${esc(c.id)}">Use this design</button><button class="eh-btn eh-o eh-s" type="button" data-act="mode-x">Cancel</button></div><p class="eh-small eh-muted" style="margin:.5rem 0 0">Changes how ${esc(st.label)} wraps the email. The preview above shows it once saved.</p></div>`;
 
   /* ---- Create email from a host's layout (a show announcement): fields in, the whole email out ---- */
@@ -533,8 +538,8 @@ export function mountEmailHub(root, options = {}) {
     lookPreview();
     if (st.caps.templates) {
       try {
-        st.tpls = null; const list = await loadTemplates();
-        $('.eh-main').insertAdjacentHTML('beforeend', `<div class="eh-card" style="margin-top:1.4rem"><h3>Templates in ${esc(st.label)}</h3>${list.length ? `<ul class="eh-tpls">${list.map((x) => `<li><span class="eh-tpl-name">${x.thumbnail ? `<img src="${esc(x.thumbnail)}" alt="" width="56" height="56" style="object-fit:cover;object-position:top;border:1px solid var(--eh-rule);border-radius:var(--eh-radius)">` : ''}${esc(x.name)} ${x.isDefault ? '<span class="eh-tag">Default</span>' : ''}</span><span class="eh-row"><button type="button" class="eh-btn eh-o eh-s" data-act="tpl-preview" data-id="${esc(x.id)}">Preview</button><button type="button" class="eh-btn eh-o eh-s" data-act="tpl-use" data-id="${esc(x.id)}">Use for a new email</button></span></li>`).join('')}</ul><div id="tpl-pv"></div>` : '<p class="eh-small eh-muted" style="margin:0">No templates.</p>'}<p class="eh-small eh-muted" style="margin:.8rem 0 0">Designs an email is sent in. Choose one when you create an email, or change a draft&rsquo;s design from its Review. To edit a design, open it in ${esc(st.label)}.</p></div>`);
+        st.tpls = null; const [list] = await Promise.all([loadTemplates(), loadLayouts()]);
+        $('.eh-main').insertAdjacentHTML('beforeend', `<div class="eh-card" style="margin-top:1.4rem"><h3>Templates in ${esc(st.label)}</h3>${list.length ? `<ul class="eh-tpls">${list.map((x) => `<li><span class="eh-tpl-name">${x.thumbnail ? `<img src="${esc(x.thumbnail)}" alt="" width="56" height="56" style="object-fit:cover;object-position:top;border:1px solid var(--eh-rule);border-radius:var(--eh-radius)">` : ''}${esc(x.name)} ${x.isDefault ? '<span class="eh-tag">Default</span>' : ''}</span><span class="eh-row"><button type="button" class="eh-btn eh-o eh-s" data-act="tpl-preview" data-id="${esc(x.id)}">Preview</button><button type="button" class="eh-btn eh-o eh-s" data-act="tpl-use" data-id="${esc(x.id)}">Use for a new email</button></span></li>`).join('')}</ul><div id="tpl-pv"></div>` : '<p class="eh-small eh-muted" style="margin:0">No templates.</p>'}${layoutRows()}<p class="eh-small eh-muted" style="margin:.8rem 0 0">Designs an email is sent in. Choose one when you create an email, or change a draft&rsquo;s design from its Review. To edit a design, open it in ${esc(st.label)}.</p></div>`);
       } catch { /* the list is a courtesy; the screen works without it */ }
     }
   }
@@ -571,6 +576,15 @@ export function mountEmailHub(root, options = {}) {
         if (d.html && !d.imageUrl) { const f = $('#tpl-frame'); f.addEventListener('load', () => { fit(f); picturesNote(f); }); f.srcdoc = d.html; f.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
       } catch (err) { box.innerHTML = `<p class="eh-msg eh-bad">${esc(err.message)}</p>`; }
     })();
+    if (a === 'lay-preview') return (async () => {
+      const box = $('#tpl-pv'), l = st.layouts?.layouts.find((x) => x.id === b.dataset.id); if (!box || !l?.sample) return; box.innerHTML = '<p class="eh-small eh-muted">Loading&hellip;</p>';
+      try {
+        const d = await api(`/layouts/${l.id}/render`, { method: 'POST', body: JSON.stringify({ values: l.sample }) });
+        box.innerHTML = `<div class="eh-frame-box" style="margin-top:1rem"><div class="eh-frame-head"><small>SAMPLE EMAIL MADE FROM THIS DESIGN</small><b>${esc(l.label)}</b></div><iframe id="tpl-frame" class="eh-frame" sandbox="allow-same-origin" title="Sample of ${esc(l.label)}"></iframe><p class="eh-small eh-muted" style="padding:.6rem .8rem;margin:0">A sample with example words. A real one is made from the fields you fill in, and the design stays the same.</p></div>`;
+        const f = $('#tpl-frame'); f.addEventListener('load', () => { fit(f); picturesNote(f); }); f.srcdoc = d.html; f.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } catch (err) { box.innerHTML = `<p class="eh-msg eh-bad">${esc(err.message)}</p>`; }
+    })();
+    if (a === 'lay-use') { st.newKind = b.dataset.id; return go('campaigns', 'new'); }
     if (a === 'tpl-use') { st.newTemplate = b.dataset.id; return go('campaigns', 'new'); }
     if (a === 'kind') return b.dataset.kind === 'text' ? compose() : composeLayout(b.dataset.kind);
     if (a === 'save-layout') return saveLayout(b);
