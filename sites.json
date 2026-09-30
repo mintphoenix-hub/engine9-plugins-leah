@@ -1,0 +1,9 @@
+{
+  "note": "Sites that follow engine9 core. `workflow` is the update workflow to trigger (it opens a pull request and never deploys); null means the site has none yet, so it is only reported.",
+  "sites": [
+    { "repo": "mintphoenix-hub/loving-motion", "workflow": "engine9-updates.yml" },
+    { "repo": "mintphoenix-hub/skirt-club-dc", "workflow": "engine9-updates.yml" },
+    { "repo": "mintphoenix-hub/sirens-of-sin", "workflow": "engine9-updates.yml" },
+    { "repo": "leah-frakture/engine9-website", "workflow": "engine9-updates.yml" }
+  ]
+}

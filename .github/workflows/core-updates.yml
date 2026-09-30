@@ -5,6 +5,9 @@
 #   - opens (or updates) the `core-compat` issue with what broke.
 # It never tags, publishes or touches a site: a person merges the pull request and tags the release, and sites
 # pick that up through their own weekly engine9-updates pull request.
+# If the repository secret SITES_TOKEN is set, a passing core also starts each site's own update workflow
+# (sites.json, scripts/update-sites.mjs --run) so every site gets its pull request at once. Without it, run
+# `node scripts/update-sites.mjs --run` by hand.
 #
 # Needs Settings > Actions > General > "Allow GitHub Actions to create and approve pull requests".
 # The daily `test` workflow is the safety net; this one is the one that keeps the package current.
@@ -68,3 +71,10 @@ jobs:
           existing=$(gh issue list --label core-compat --state open --json number --jq '.[0].number')
           if [ -n "$existing" ]; then gh issue comment "$existing" --body-file "$RUNNER_TEMP/report.md"
           else gh issue create --label core-compat --title "Plugins fail against the newest engine9 core" --body-file "$RUNNER_TEMP/report.md"; fi
+      - name: Start the sites' updates (the newest core passes)
+        if: steps.s.outputs.changed == 'true' && steps.s.outputs.passed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SITES_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "No SITES_TOKEN secret; skipping. Run scripts/update-sites.mjs --run by hand."; exit 0; fi
+          node scripts/update-sites.mjs --run
