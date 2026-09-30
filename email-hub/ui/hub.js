@@ -13,6 +13,10 @@
     emoji: ['🌿', ...]        the host's emoji set for the composer            emojiOpen: true   the tray starts open
     fontChoice: true          show a "Words" Sans / Serif choice on Content (writes style.font; the host's shell must honour it)
     logoHelp: 'text'          a line under the logo choices on Content
+    theme: true               take the look from the site the screens are in, and keep up when it changes (theme.js). An object
+                              { vars, hints, observe } sets explicit --eh-* values (which always win), selectors to sample
+                              ({ accent, primary, heading, panel }), or turns watching off. Returns theme.refresh() / theme.stop() as
+                              hub.theme.
     extras.homeStats(days)    -> [{ label, value, note }]   extra numbers in the Home snapshot
     extras.homeCards()        -> [{ title, html }]           extra cards on Home, under Recent campaigns (host-trusted HTML)
     extras.homeBanner()       -> { html, label, run }        a line at the top of Home, with an optional button
@@ -30,6 +34,7 @@
 import { bodyHtml } from '../shell.js';
 import { parseCsv } from '../csv.js';
 import { wallToUtc } from '../time.js';
+import { applyTheme } from './theme.js';
 
 const ICON = {
   home: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>', campaigns: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
@@ -86,6 +91,9 @@ export function mountEmailHub(root, options = {}) {
 
   /* ---- shell ---- */
   root.classList.add('eh');
+  /* theme: true (or an options object) makes the screens take their look from the site they are in, and keep up when the site
+     changes (see theme.js). Anything the host sets on the element itself still wins, key by key, through theme.vars. */
+  const theme = options.theme ? applyTheme(root, options.theme === true ? {} : options.theme) : null;
   root.innerHTML = `<div class="eh-hub"><nav class="eh-nav" aria-label="Email sections"><button type="button" class="eh-btn eh-alt eh-create" data-act="create">${svg(ICON.create, 16)} Create</button><ul id="eh-navlist"></ul></nav><div class="eh-main" aria-live="polite"><p class="eh-muted">Loading…</p></div></div>`;
 
   /* The left nav. Audience carries its own choices (All contacts, Tags, ...) underneath while you are in it. */
@@ -525,5 +533,5 @@ export function mountEmailHub(root, options = {}) {
   });
 
   go('home');
-  return { go, refresh: () => { st.ov = null; return render(); }, destroy() { document.removeEventListener('mousedown', outside); document.removeEventListener('keydown', onKey); root.innerHTML = ''; root.classList.remove('eh'); } };
+  return { go, theme, refresh: () => { st.ov = null; return render(); }, destroy() { if (theme) theme.stop(); document.removeEventListener('mousedown', outside); document.removeEventListener('keydown', onKey); root.innerHTML = ''; root.classList.remove('eh'); } };
 }
