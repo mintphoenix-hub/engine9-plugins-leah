@@ -101,7 +101,7 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
       }
       // The template a new email is sent in: the one chosen, else the host's `newTemplateId` (a template that only holds the message, for a host
       // whose emails are whole designed emails), else the service's own default.
-      const tid = (await knownTemplate(b.templateId)) || (newTemplateId ? await knownTemplate(newTemplateId) : '');
+      const tid = (await knownTemplate(b.templateId)) || (newTemplateId ? String(newTemplateId) : '');   // only a person's choice is checked; the host's own default is trusted, so a template list that is down cannot stop an email being written
       const c = await provider.createCampaign({ subject, previewText: clip(b.previewText, 150).trim(), title: clip(b.title, 100).trim(), html, to: parseTo(b.to), ...(tid ? { templateId: tid } : {}) });
       return json(200, { campaign: c, ...(warnings.length ? { warnings } : {}) });
     }

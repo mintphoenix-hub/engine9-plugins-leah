@@ -3,7 +3,7 @@ import { pickTemplate, renderTemplate } from './templates.js';
 import { createEmailHub } from './routes.js';
 import { createMemoryProvider } from './adapters/memory.js';
 import { createMailchimpProvider } from './adapters/mailchimp.js';
-import { capabilitiesOf } from './provider.js';
+import { capabilitiesOf, HubError } from './provider.js';
 
 let n = 0;
 const ok = (name) => { n++; console.log('  ok  ' + name); };
@@ -71,6 +71,9 @@ console.log('choosing a template');
   assert.equal((await post(dflt, 'GET', `/campaigns/${viaDefault.body.campaign.id}/content`)).body.templateId, 't2'); ok('a new email with no choice is sent in the host\'s template, not the service\'s default');
   const chosen = await post(dflt, 'POST', '/campaigns', { subject: 'S', text: 'Hi there', templateId: 't1' });
   assert.equal((await post(dflt, 'GET', `/campaigns/${chosen.body.campaign.id}/content`)).body.templateId, 't1'); ok('a chosen template still wins');
+  const noList = createMemoryProvider(); noList.listTemplates = async () => { throw new HubError('down', 503); };
+  const resilient = createEmailHub({ provider: noList, newTemplateId: 't2' });
+  assert.equal((await post(resilient, 'POST', '/campaigns', { subject: 'S', text: 'Hi there' })).status, 200); ok('a template list that is down does not stop an email being written');
   const plainCfg = createEmailHub({ provider });
   assert.equal((await post(plainCfg, 'GET', '/config')).body.newTemplateId, ''); ok('and with no host template nothing changes');
   const none = await post(hub, 'GET', '/templates/t1/preview');

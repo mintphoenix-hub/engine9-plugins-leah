@@ -268,6 +268,7 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 
 ## Version history
 
+- **3.18.2**: `newTemplateId` is trusted, not checked against the service's template list, so a list that is down cannot stop an email being written (a person's own choice is still checked).
 - **3.18.1**: `newTemplateId` option: the template a new email is sent in when the person does not choose one. For a host whose emails are whole designed emails (everything the hub writes or pastes is), point it at a template that only holds the message; without it Kit wraps the email in the account's default template and it is designed twice (a card inside a card, two logos). `GET /config` returns it and the Design chooser preselects it.
 - **3.18.0**: A layout may carry a `source` (`{ label, list(), get(id) }`): New show then offers "Pull copy from ..." with a chooser and "Fill empty fields" / "Replace all fields", suggesting values (and a subject and preview line) from the host's own data. Read-only routes `GET /layouts/:id/source` and `/source/:sid`; values are cleaned like typed ones and nothing is saved until Save. No schema change.
 - **3.17.0**: Layouts are listed as templates: Content -> Templates has a "Made from fields" section (New show and the like) with Preview (a layout may carry `sample` values) and "Use for a new email". A preview also fills the merge tags the sample message itself carries, so no raw `{{ }}` shows. No schema change.
