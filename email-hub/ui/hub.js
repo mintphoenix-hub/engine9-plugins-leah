@@ -310,8 +310,8 @@ export function mountEmailHub(root, options = {}) {
     if (st.newKind) { const k = st.newKind; st.newKind = ''; return composeLayout(k); }
     const copy = st.prefill; st.prefill = null;                       // a Duplicate hands its words over once
     let kept = copy || null; if (!copy) { try { kept = JSON.parse(localStorage.getItem(draftKey) || 'null'); } catch { /* no storage */ } }
-    const restored = Boolean(kept && (kept.s || kept.x || kept.h)) && !copy; st.last = 'eh-sub'; st.bodyMode = kept?.mode === 'html' ? 'html' : 'text';
-    main().innerHTML = head('Create email', `Write it here, see it as an inbox will, and save it as a draft in ${st.label}. Nothing goes out until you schedule it.`, '<button class="eh-btn eh-o eh-s" type="button" data-act="nav" data-page="campaigns">&larr; All campaigns</button>') + kindTabs('text') + `<div class="eh-comp"><div class="eh-comp-l">
+    const restored = Boolean(kept && (kept.s || kept.x || kept.h)) && !copy; st.last = 'eh-sub'; st.bodyMode = st.wantHtml ? 'html' : st.wantText ? 'text' : kept?.mode === 'html' ? 'html' : 'text'; st.wantHtml = false; st.wantText = false;
+    main().innerHTML = head('Create email', `Write it here, see it as an inbox will, and save it as a draft in ${st.label}. Nothing goes out until you schedule it.`, '<button class="eh-btn eh-o eh-s" type="button" data-act="nav" data-page="campaigns">&larr; All campaigns</button>') + kindTabs(st.bodyMode === 'html' ? 'html' : 'text') + `<div class="eh-comp"><div class="eh-comp-l">
       ${copy ? `<p class="eh-flash" role="status" style="margin:0">Copied from &ldquo;${esc(copy.from)}&rdquo;. Change what you need, then save it as a new draft. The original is untouched. <button type="button" class="eh-link" data-act="fresh">Start from blank instead</button></p>` : ''}
       ${restored ? '<p class="eh-flash" role="status" style="margin:0">Picked up where you left off. <button type="button" class="eh-link" data-act="fresh">Start a new one</button></p>' : ''}
       ${step(1, 'Who it is for', 'Everyone on your list, or one group.', '<div class="eh-field" style="margin:0"><label for="eh-to">Send to</label><select id="eh-to"><option value="">Everyone on your list</option></select><p class="eh-small" id="eh-to-n" style="margin:.5rem 0 0"></p></div>' + templatePicker(st.newTemplate))}
@@ -397,7 +397,7 @@ export function mountEmailHub(root, options = {}) {
   }
   /* "Write it" and each layout the host offers, as the first choice on Create. Nothing when there are none. */
   const kindTabs = (current) => (st.layouts?.enabled && st.layouts.layouts.length
-    ? `<div class="eh-tabs" role="tablist" aria-label="What kind of email" style="margin:0 0 1rem"><button type="button" class="eh-btn eh-o eh-s" role="tab" data-act="kind" data-kind="text" aria-selected="${current === 'text'}">Write it</button>${st.layouts.layouts.map((l) => `<button type="button" class="eh-btn eh-o eh-s" role="tab" data-act="kind" data-kind="${esc(l.id)}" aria-selected="${current === l.id}">${esc(l.label)}</button>`).join('')}</div>`
+    ? `<div class="eh-tabs" role="tablist" aria-label="What kind of email" style="margin:0 0 1rem"><button type="button" class="eh-btn eh-o eh-s" role="tab" data-act="kind" data-kind="text" aria-selected="${current === 'text'}">Write it</button><button type="button" class="eh-btn eh-o eh-s" role="tab" data-act="kind" data-kind="html" aria-selected="${current === 'html'}">Paste HTML</button>${st.layouts.layouts.map((l) => `<button type="button" class="eh-btn eh-o eh-s" role="tab" data-act="kind" data-kind="${esc(l.id)}" aria-selected="${current === l.id}">${esc(l.label)}</button>`).join('')}</div>`
     : '');
   const layoutValues = () => Object.fromEntries((st.lay?.def?.fields || []).map((f) => [f.key, $('#lf-' + f.key)?.value ?? '']));
   async function composeLayout(layoutId, edit = null) {
@@ -617,7 +617,7 @@ export function mountEmailHub(root, options = {}) {
     })();
     if (a === 'lay-use') { st.newKind = b.dataset.id; return go('campaigns', 'new'); }
     if (a === 'tpl-use') { st.newTemplate = b.dataset.id; return go('campaigns', 'new'); }
-    if (a === 'kind') return b.dataset.kind === 'text' ? compose() : composeLayout(b.dataset.kind);
+    if (a === 'kind') { if (b.dataset.kind === 'html') { st.wantHtml = true; return compose(); } if (b.dataset.kind === 'text') { st.wantText = true; return compose(); } return composeLayout(b.dataset.kind); }
     if (a === 'save-layout') return saveLayout(b);
     if (a === 'save-layout-schedule') return saveLayout(b, true);
     if (a === 'edit-fields') return editFields(b.dataset.id).catch((err) => flash(err.message));
@@ -627,7 +627,7 @@ export function mountEmailHub(root, options = {}) {
     if (a === 'pv') { st.pv = b.dataset.pv; root.querySelectorAll('[data-act="pv"]').forEach((x) => x.setAttribute('aria-selected', String(x === b))); $('#eh-pv-inbox').classList.toggle('eh-hide', st.pv !== 'inbox'); $('#eh-pv-open').classList.toggle('eh-hide', st.pv !== 'open'); return preview(); }
     if (a === 'save-draft') return saveDraft(b);
     if (a === 'save-draft-schedule') return saveDraft(b, true);
-    if (a === 'body-mode') { st.bodyMode = b.dataset.mode; root.querySelectorAll('[data-act="body-mode"]').forEach((x) => x.setAttribute('aria-selected', String(x === b))); $('#eh-html-box').classList.toggle('eh-hide', st.bodyMode !== 'html'); $('#eh-text-box').classList.toggle('eh-hide', st.bodyMode === 'html'); return preview(); }
+    if (a === 'body-mode') { st.bodyMode = b.dataset.mode; root.querySelectorAll('[data-act=kind]').forEach((x) => x.setAttribute('aria-selected', String(x.dataset.kind === (st.bodyMode === 'html' ? 'html' : 'text')))); root.querySelectorAll('[data-act="body-mode"]').forEach((x) => x.setAttribute('aria-selected', String(x === b))); $('#eh-html-box').classList.toggle('eh-hide', st.bodyMode !== 'html'); $('#eh-text-box').classList.toggle('eh-hide', st.bodyMode === 'html'); return preview(); }
     if (a === 'banner') return st.banner?.run?.();
     if (a === 'home-banner') return st.homeBanner?.run?.();
     if (a === 'asub') { st.sub = b.dataset.sub; return audience(); }
