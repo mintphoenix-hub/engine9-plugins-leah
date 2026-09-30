@@ -72,6 +72,16 @@ export function paragraphs(text, style) {
   return String(text || '').replace(/\r\n/g, '\n').split(/\n{2,}/).map((p) => p.trim()).filter(Boolean)
     .map((p) => `<p style="margin:0 0 18px">${link(esc(p)).replace(/\n/g, '<br>')}</p>`).join('');
 }
+/* The reverse of paragraphs(): the plain words of an email the hub wrote, so a copy can be opened for editing. Returns null when
+   the HTML is not the hub's own (a design made in the service, or pasted in), because its words cannot be read back safely. */
+export function textFromBodyHtml(html) {
+  const P = /<p\b[^>]*style="[^"]*margin\s*:\s*0\s+0\s+18px[^"]*"[^>]*>([\s\S]*?)<\/p>/gi;
+  const parts = [...String(html || '').matchAll(P)].map((m) => m[1]);
+  if (!parts.length) return null;
+  const decode = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');
+  return parts.map((p) => decode(p.replace(/<br\s*\/?>/gi, '\n').replace(/<a\b[^>]*>([\s\S]*?)<\/a>/gi, '$1').replace(/<[^>]+>/g, '')).trim())
+    .filter(Boolean).join('\n\n');
+}
 export function bodyHtml(text, opts = {}) {
   return `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0">${emailShell(paragraphs(text, opts.style), opts)}</body></html>`;
 }

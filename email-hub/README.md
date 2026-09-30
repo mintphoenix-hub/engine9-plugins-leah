@@ -217,6 +217,19 @@ A service's templates are its own designs. The hub lists them (Content), lets a 
   (each may itself be a function returning the html). Give a template that holds a whole designed email a sample of that email, so its preview is the design.
 - A provider adds `templatePreview(id)` (optional) to show one itself, and returns `thumbnail` from `listTemplates`.
 
+## Duplicating an email to change some words
+
+**Duplicate** on an email the hub wrote from plain words (Write it) now opens the **Create** screen with the subject, preview text,
+name ("... (copy)") and message already filled in, instead of making a copy in the service straight away. Change what you need
+and save it as a new draft; nothing exists in the service until you do, and the original is untouched. It suits sending the same
+email again in a run with a few words changed.
+
+- `GET /campaigns/:id/source` gives `{ subject, previewText, title, text }`. `text` comes from reading the hub's own paragraphs back
+  out (`textFromBodyHtml` in `shell.js`, the reverse of `paragraphs`); it is `null` when the HTML is not the hub's own.
+- When `text` is `null` (a design made in the service, pasted HTML) or the email is a layout email, Duplicate behaves as before:
+  the service copies it in place, and layout emails open their fields to edit.
+- The recipient group is not carried over: choose it again on the Create screen.
+
 ## Options a host may set
 
 Everything below is optional and defaults to the neutral behavior, so a site that sets none of it is unchanged.
@@ -268,6 +281,7 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 
 ## Version history
 
+- **3.21.0**: Duplicate opens the Create screen filled in (subject, preview, name, words) for emails the hub wrote from plain words. `GET /campaigns/:id/source`; `textFromBodyHtml`. Layout emails and service-made designs are copied in place as before. Additive; no schema change.
 - **3.20.0**: Create has a "Save and schedule…" button beside "Save draft" (Write it and layouts alike): it saves the draft and opens its Schedule form straight away. Scheduling itself is unchanged: a draft, a time at least the lead time ahead, and a ticked "I have read the preview". UI only.
 - **3.19.2**: Removed the "Choose a template" popup (owner: not needed). Create goes straight to the Create page, where "Write it" and each layout (for example "New show") sit side by side at the top. The message-only template is still not listed and a host that fixes the design still shows no Design chooser.
 - **3.19.1**: Fix: the Choose a template popup's stylesheet had a stray character that stopped its first rule applying, so the popup drew in the page instead of over it.

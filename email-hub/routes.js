@@ -12,7 +12,7 @@ import { pickTemplate, renderTemplate } from './templates.js';
 import { checkLayouts, listLayouts, cleanValues, renderLayout } from './layouts.js';
 import { assertProvider, capabilitiesOf, HubError } from './provider.js';
 import { planSchedule, isDraft, scheduleRules } from './schedule.js';
-import { bodyHtml, checkStyle, defaultStyle, StyleError } from './shell.js';
+import { bodyHtml, textFromBodyHtml, checkStyle, defaultStyle, StyleError } from './shell.js';
 import { cleanEmailHtml, checkEmailHtml, MAX_HTML } from './pasted.js';
 import { cleanPeople, isEmail, MAX_IMPORT } from './csv.js';
 import { emailsIn } from './stats.js';
@@ -29,7 +29,7 @@ export function parseTo(to) {
   return m[1] === 't' ? { tagId: m[2] } : { segmentId: m[2] };
 }
 
-const ROUTE = /^\/(campaigns|audience|overview|contacts|tags|fields|import|look|config|templates|layouts)(?:\/([A-Za-z0-9_-]+))?(?:\/(content|duplicate|schedule|unschedule|test|checklist|report|tags|unsubscribe|render|layout|preview))?$/;
+const ROUTE = /^\/(campaigns|audience|overview|contacts|tags|fields|import|look|config|templates|layouts)(?:\/([A-Za-z0-9_-]+))?(?:\/(content|source|duplicate|schedule|unschedule|test|checklist|report|tags|unsubscribe|render|layout|preview))?$/;
 
 export function createEmailHub({ provider, brand = {}, store = null, now = () => Date.now(), schedule = {}, people = null, templates = null, defaultTemplate = '', layouts = null, layoutTemplateId = '', newTemplateId = '', templateSample = '' } = {}) {
   checkLayouts(layouts);
@@ -140,6 +140,12 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
     if (id && action === 'layout' && method === 'GET') {
       const one = layoutsOn() ? await store.getLayout(id) : null;
       return json(200, one && layouts[one.layout] ? { layout: one.layout, values: one.values, label: layouts[one.layout].label } : { layout: null });
+    }
+    if (id && action === 'source' && method === 'GET') {
+      // What Duplicate needs to open the Create screen filled in: the subject and preview, and the words if the hub wrote them.
+      const [c, content] = await Promise.all([provider.getCampaign(id), provider.campaignContent(id)]);
+      const text = textFromBodyHtml(content.html);
+      return json(200, { subject: c.subject || '', previewText: c.preview || c.previewText || '', title: c.title || '', text });
     }
     if (id && action === 'duplicate' && method === 'POST') {
       const made = await provider.duplicateCampaign(id);

@@ -213,4 +213,39 @@ import { cleanEmailHtml, checkEmailHtml } from './pasted.js';
   assert.equal(checkEmailHtml('<p>Hi</p>', { unsubscribe: '{{ unsubscribe_url }}' }).errors.length, 1);
 }
 
+
+console.log('duplicate: open the Create screen filled in');
+import { textFromBodyHtml, paragraphs } from './shell.js';
+{
+  await t('the source of a hub email gives back the subject, preview, name and the words', async ({ call }) => {
+    const made = await call('POST', '/campaigns', { subject: 'Spring gathering', previewText: 'Save the date', title: 'Spring run', text: 'Hello there.\n\nSee https://example.org/a?x=1&y=2 for details.\nSecond line.' });
+    const r = await call('GET', `/campaigns/${made.body.campaign.id}/source`);
+    assert.equal(r.status, 200);
+    assert.deepEqual([r.body.subject, r.body.previewText, r.body.title], ['Spring gathering', 'Save the date', 'Spring run']);
+    assert.equal(r.body.text, 'Hello there.\n\nSee https://example.org/a?x=1&y=2 for details.\nSecond line.');
+  });
+  await t('what was typed comes back exactly, including &, < >, quotes, links and line breaks', async () => {
+    for (const text of ['One paragraph.', 'Fish & chips <b>not bold</b> "quoted" it\'s', 'A\nB\nC\n\nD https://x.test/p?a=1&b=2', 'Emoji 🌿 and ünïcode', '  padded  \n\n\n\n  spaced  ']) {
+      const back = textFromBodyHtml(paragraphs(text));
+      assert.equal(back, text.split(/\n{2,}/).map((x) => x.trim()).filter(Boolean).join('\n\n'), text);
+    }
+  });
+  await t('an email the hub did not write gives no words, so Duplicate copies it in place instead', async ({ fake, call }) => {
+    const made = await call('POST', '/campaigns', { subject: 'Designed', text: 'x' });
+    fake.state.campaigns.get(made.body.campaign.id).html = '<html><body><table><tr><td><h1>Designed in Mailchimp</h1><p>Words</p></td></tr></table></body></html>';
+    assert.equal((await call('GET', `/campaigns/${made.body.campaign.id}/source`)).body.text, null);
+    const pasted = await call('POST', '/campaigns', { subject: 'Pasted', html: '<html><body><p>Hi there</p><a href="*|UNSUB|*">Unsubscribe</a></body></html>' });
+    assert.equal((await call('GET', `/campaigns/${pasted.body.campaign.id}/source`)).body.text, null);
+  });
+  await t('the service tidying the HTML (<br />, spacing in the style) does not stop the words coming back', async () => {
+    const html = '<div><p style="margin: 0 0 18px;">Line one<br />line two</p><P style="margin:0 0 18px">Link <a href="https://a.test" style="color:#000">https://a.test</a></P></div>';
+    assert.equal(textFromBodyHtml(html), 'Line one\nline two\n\nLink https://a.test');
+  });
+  await t('asking for the source changes nothing in the service', async ({ fake, call }) => {
+    const made = await call('POST', '/campaigns', { subject: 'S', text: 'Words' });
+    const before = fake.calls.length; await call('GET', `/campaigns/${made.body.campaign.id}/source`);
+    assert.ok(fake.calls.slice(before).every((c) => c.method === 'GET'));
+  });
+}
+
 console.log(`${n} passed`);

@@ -267,7 +267,18 @@ export function mountEmailHub(root, options = {}) {
     const back = (text, filter) => { if (filter) st.filter = filter; st.mode = null; draw(true); flash(text); };
     if (action === 'edit-save') busy(async () => { const d = await api(`/campaigns/${id}`, { method: 'PATCH', body: JSON.stringify({ subject: $('#ed-sub').value, previewText: $('#ed-pre').value, title: $('#ed-title').value }) }); Object.assign(c, d.campaign); back('Details saved.'); });
     else if (action === 'test-send') busy(async () => { const d = await api(`/campaigns/${id}/test`, { method: 'POST', body: JSON.stringify({ emails: $('#ts-to').value.split(/[\s,;]+/).filter(Boolean) }) }); say(msg(), `Test sent to ${d.sentTo.join(', ')}.`); });
-    else if (action === 'dup') busy(async () => { const d = await api(`/campaigns/${id}/duplicate`, { method: 'POST' }); const l = await api('/campaigns'); st.all = l.campaigns; st.open = d.campaign.id; const made = (await loadLayouts()).enabled ? await api(`/campaigns/${d.campaign.id}/layout`).catch(() => null) : null; if (made?.layout) { st.filter = 'draft'; st.page = 'campaigns'; st.sub = 'new'; return editFields(d.campaign.id, true); } back('Copied. The copy is a draft; nothing has been sent.', 'draft'); });
+    else if (action === 'dup') busy(async () => {
+      // An email the hub wrote from plain words opens on the Create screen with everything filled in: change what you need and
+      // save it as a new draft. Nothing is created until then. Layout emails and designs made in the service are copied in place.
+      const own = (await loadLayouts()).enabled ? await api(`/campaigns/${id}/layout`).catch(() => null) : null;
+      if (!own?.layout) {
+        const src = await api(`/campaigns/${id}/source`).catch(() => null);
+        if (src && src.text) {
+          st.prefill = { s: src.subject, p: src.previewText, t: src.title ? `${src.title} (copy)` : '', x: src.text, mode: 'text', from: src.subject || src.title || 'that email' };
+          st.newKind = ''; st.filter = 'all'; return go('campaigns', 'new');
+        }
+      }
+      const d = await api(`/campaigns/${id}/duplicate`, { method: 'POST' }); const l = await api('/campaigns'); st.all = l.campaigns; st.open = d.campaign.id; const made = (await loadLayouts()).enabled ? await api(`/campaigns/${d.campaign.id}/layout`).catch(() => null) : null; if (made?.layout) { st.filter = 'draft'; st.page = 'campaigns'; st.sub = 'new'; return editFields(d.campaign.id, true); } back('Copied. The copy is a draft; nothing has been sent.', 'draft'); });
     else if (action === 'tpl-save') busy(async () => { const v = $('#tp-sel').value; await api(`/campaigns/${id}`, { method: 'PATCH', body: JSON.stringify({ templateId: v }) }); (st.tplOf = st.tplOf || {})[id] = v; back('Design changed.'); });
     else if (action === 'del') busy(async () => { await api(`/campaigns/${id}`, { method: 'DELETE' }); st.all = st.all.filter((x) => x.id !== id); st.open = null; back('Draft deleted.'); });
     else if (action === 'unsched') busy(async () => { const d = await api(`/campaigns/${id}/unschedule`, { method: 'POST' }); Object.assign(c, d.campaign); st.open = id; back('Unscheduled. It is a draft again and will not be sent.', 'draft'); });
@@ -297,9 +308,11 @@ export function mountEmailHub(root, options = {}) {
   async function compose() {
     await Promise.all([loadLayouts(), loadTemplates()]);
     if (st.newKind) { const k = st.newKind; st.newKind = ''; return composeLayout(k); }
-    let kept = null; try { kept = JSON.parse(localStorage.getItem(draftKey) || 'null'); } catch { /* no storage */ }
-    const restored = Boolean(kept && (kept.s || kept.x || kept.h)); st.last = 'eh-sub'; st.bodyMode = kept?.mode === 'html' ? 'html' : 'text';
+    const copy = st.prefill; st.prefill = null;                       // a Duplicate hands its words over once
+    let kept = copy || null; if (!copy) { try { kept = JSON.parse(localStorage.getItem(draftKey) || 'null'); } catch { /* no storage */ } }
+    const restored = Boolean(kept && (kept.s || kept.x || kept.h)) && !copy; st.last = 'eh-sub'; st.bodyMode = kept?.mode === 'html' ? 'html' : 'text';
     main().innerHTML = head('Create email', `Write it here, see it as an inbox will, and save it as a draft in ${st.label}. Nothing goes out until you schedule it.`, '<button class="eh-btn eh-o eh-s" type="button" data-act="nav" data-page="campaigns">&larr; All campaigns</button>') + kindTabs('text') + `<div class="eh-comp"><div class="eh-comp-l">
+      ${copy ? `<p class="eh-flash" role="status" style="margin:0">Copied from &ldquo;${esc(copy.from)}&rdquo;. Change what you need, then save it as a new draft. The original is untouched. <button type="button" class="eh-link" data-act="fresh">Start from blank instead</button></p>` : ''}
       ${restored ? '<p class="eh-flash" role="status" style="margin:0">Picked up where you left off. <button type="button" class="eh-link" data-act="fresh">Start a new one</button></p>' : ''}
       ${step(1, 'Who it is for', 'Everyone on your list, or one group.', '<div class="eh-field" style="margin:0"><label for="eh-to">Send to</label><select id="eh-to"><option value="">Everyone on your list</option></select><p class="eh-small" id="eh-to-n" style="margin:.5rem 0 0"></p></div>' + templatePicker(st.newTemplate))}
       ${step(2, 'Subject and preview', 'The two lines a person reads before they open it.', `<div class="eh-field"><div class="eh-lab"><label for="eh-sub">Subject line</label><span class="eh-count" id="eh-sub-n"></span></div><input id="eh-sub" type="text" maxlength="150" autocomplete="off" style="font-size:calc(1.05rem*var(--eh-scale,1))"></div>
@@ -370,13 +383,13 @@ export function mountEmailHub(root, options = {}) {
     : '');
   /* The template opened in the service itself, where its full design can be previewed. */
   const tplLink = (d) => (d?.url ? `<p style="margin:.7rem 0 0"><a class="eh-btn eh-o eh-s" href="${esc(d.url)}" target="_blank" rel="noopener">Preview the full design in ${esc(st.label)} &#8599;</a></p>` : '');
-  /* Designs a host made from fields (a show announcement) are templates too: listed beside the service's own, with a preview and "use". */
+  /* Designs a host made from fields (an announcement) are templates too: listed beside the service's own, with a preview and "use". */
   const layoutRows = () => (st.layouts?.enabled && st.layouts.layouts.length
     ? `<h4 style="margin:1.1rem 0 .2rem;font-size:calc(.8rem*var(--eh-scale,1));letter-spacing:.14em;text-transform:uppercase" class="eh-muted">Made from fields</h4><ul class="eh-tpls">${st.layouts.layouts.map((l) => `<li><span class="eh-tpl-name">${esc(l.label)} <span class="eh-tag">Fields</span>${l.description ? `<span class="eh-small eh-muted" style="flex-basis:100%">${esc(l.description)}</span>` : ''}</span><span class="eh-row">${l.sample ? `<button type="button" class="eh-btn eh-o eh-s" data-act="lay-preview" data-id="${esc(l.id)}">Preview</button>` : ''}<button type="button" class="eh-btn eh-o eh-s" data-act="lay-use" data-id="${esc(l.id)}">Use for a new email</button></span></li>`).join('')}</ul>`
     : '');
   const templateBox = (c) => `<div class="eh-box"><div class="eh-field"><label for="tp-sel">Design this email is sent in</label><select id="tp-sel">${(st.tpls || []).map((t) => `<option value="${esc(t.id)}"${String(t.id) === String(st.tplOf?.[c.id]) ? ' selected' : ''}>${esc(t.name)}${t.isDefault ? ' (default)' : ''}</option>`).join('')}</select></div><div class="eh-row"><button class="eh-btn eh-s" type="button" data-act="tpl-save" data-id="${esc(c.id)}">Use this design</button><button class="eh-btn eh-o eh-s" type="button" data-act="mode-x">Cancel</button></div><p class="eh-small eh-muted" style="margin:.5rem 0 0">Changes how ${esc(st.label)} wraps the email. The preview above shows it once saved.</p></div>`;
 
-  /* ---- Create email from a host's layout (a show announcement): fields in, the whole email out ---- */
+  /* ---- Create email from a host's layout (an announcement): fields in, the whole email out ---- */
   async function loadLayouts() {
     if (st.layouts) return st.layouts;
     try { st.layouts = await api('/layouts'); } catch { st.layouts = { enabled: false, layouts: [] }; }
