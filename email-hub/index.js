@@ -38,6 +38,7 @@ export * from './time.js';
 export * from './logos.js';
 export * from './unsubscribe.js';
 export * from './routes.js';
+export * from './migrate.js';
 export * from './store.js';
 export * from './people.js';
 export * from './adapters/index.js';

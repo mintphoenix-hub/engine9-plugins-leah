@@ -11,6 +11,7 @@
 import { pickTemplate, renderTemplate } from './templates.js';
 import { checkLayouts, listLayouts, cleanValues, renderLayout } from './layouts.js';
 import { assertProvider, capabilitiesOf, HubError } from './provider.js';
+import { createMigration } from './migrate.js';
 import { planSchedule, isDraft, scheduleRules } from './schedule.js';
 import { bodyHtml, textFromBodyHtml, checkStyle, defaultStyle, StyleError } from './shell.js';
 import { cleanEmailHtml, checkEmailHtml, MAX_HTML } from './pasted.js';
@@ -29,13 +30,15 @@ export function parseTo(to) {
   return m[1] === 't' ? { tagId: m[2] } : { segmentId: m[2] };
 }
 
-const ROUTE = /^\/(campaigns|audience|overview|contacts|tags|fields|import|look|config|templates|layouts)(?:\/([A-Za-z0-9_-]+))?(?:\/(content|source|duplicate|schedule|unschedule|test|checklist|report|tags|unsubscribe|render|layout|preview))?$/;
+const ROUTE = /^\/(campaigns|audience|overview|contacts|tags|fields|import|look|config|templates|layouts|migrate)(?:\/([A-Za-z0-9_-]+))?(?:\/(content|source|duplicate|schedule|unschedule|test|checklist|report|tags|unsubscribe|render|layout|preview))?$/;
 
-export function createEmailHub({ provider, brand = {}, store = null, now = () => Date.now(), schedule = {}, people = null, templates = null, defaultTemplate = '', layouts = null, layoutTemplateId = '', newTemplateId = '', templateSample = '' } = {}) {
+export function createEmailHub({ provider, migrateFrom = null, brand = {}, store = null, now = () => Date.now(), schedule = {}, people = null, templates = null, defaultTemplate = '', layouts = null, layoutTemplateId = '', newTemplateId = '', templateSample = '' } = {}) {
   checkLayouts(layouts);
   const rules = scheduleRules(schedule);
   assertProvider(provider);
   const caps = capabilitiesOf(provider);
+  if (migrateFrom) assertProvider(migrateFrom);
+  const migration = migrateFrom ? createMigration({ from: migrateFrom, to: provider, store }) : null;
   const need = (k) => { if (!caps[k]) throw new HubError('That is not something this email service can do from here.', 405); };
 
   const loadStyle = async () => {
@@ -203,6 +206,19 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
     return { connected: true, dc: list.dc, audience, campaigns: all, counts, growth30: g30, growth90: g90, email30: emailStats(30), email90: emailStats(90) };
   }
 
+  /* Moving a list from another service (migrate.js). Only when the host passed `migrateFrom`. */
+  async function migrate(request, method, step) {
+    if (!migration) throw new HubError('Moving from another email service is not set up for this site.', 404);
+    if (!step && method === 'GET') return json(200, await migration.plan());
+    if (step === 'contacts' && method === 'POST') {
+      const b = await readBody(request);
+      if (b.agreed !== true) throw new HubError(`Tick the box to say these people agreed to hear from you in ${migrateFrom.label}.`);
+      return json(200, await migration.contacts({ after: b.after }));
+    }
+    if (step === 'archive' && method === 'POST') return json(200, await migration.archive({ after: (await readBody(request)).after }));
+    return json(405, { error: 'That is not something we do.' });
+  }
+
   async function contacts(request, url, method, id, sub) {
     need('contacts');
     if (!id && method === 'GET') {
@@ -281,13 +297,14 @@ export function createEmailHub({ provider, brand = {}, store = null, now = () =>
     const [, area, id, sub] = m || [];
     const url = new URL(request.url);
     try {
-      if (area === 'config') return json(200, { newTemplateId: String(newTemplateId || ''), layoutTemplateId: String(layoutTemplateId || ''), label: provider.label, capabilities: caps, brand: { name: brand.name || '' }, appUrl: provider.appUrl('/'), unsubscribePage: brand.unsubscribePage || null, schedule: rules, mergeTags: { unsubscribe: provider.mergeTags.unsubscribe, address: provider.mergeTags.address } });
+      if (area === 'config') return json(200, { newTemplateId: String(newTemplateId || ''), layoutTemplateId: String(layoutTemplateId || ''), label: provider.label, migrate: migration ? { from: migrateFrom.label } : null, capabilities: caps, brand: { name: brand.name || '' }, appUrl: provider.appUrl('/'), unsubscribePage: brand.unsubscribePage || null, schedule: rules, mergeTags: { unsubscribe: provider.mergeTags.unsubscribe, address: provider.mergeTags.address } });
       // Logos and the archive do not need the service to be connected (the archive outlives it).
       if (isExtra) return (await extras(request, path, method)) || json(405, { error: 'That is not something we do.' });
       if (!provider.connected()) {
         if (method === 'GET') return json(200, { connected: false, campaigns: [], tags: [], segments: [], label: provider.label });
         throw new HubError(`${provider.label} is not connected yet.`, 503);
       }
+      if (area === 'migrate') return await migrate(request, method, id);
       if (area === 'overview' && method === 'GET') return json(200, await overview());
       if (area === 'audience' && method === 'GET' && !id) return json(200, { connected: true, ...(await provider.audience()) });
       if (area === 'layouts') return await layoutRoutes(request, method, id, sub);

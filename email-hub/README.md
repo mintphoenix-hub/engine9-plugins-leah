@@ -47,7 +47,7 @@ It is a **native plugin** (`metadata.unique: true`, no `metadata.prefix`) that n
 
 ### The routes
 
-`/config`, `/overview`, `/campaigns` (+ `/:id`, `/content`, `/report`, `/checklist`, `/duplicate`, `/schedule`, `/unschedule`, `/test`), `/audience`, `/contacts` (+ `/:id`, `/tags`, `/unsubscribe`), `/tags`, `/fields`, `/import`, `/look`, `/look/logos` (POST a multipart `file` and `name`; DELETE `/look/logos/<id>`), `/archive` (+ `/:source/:id/content`). Responses are the stable contract between the hub and its screens. Logos and the archive work even when the provider is not connected (the archive outlives the account it came from).
+`/config`, `/overview`, `/campaigns` (+ `/:id`, `/content`, `/report`, `/checklist`, `/duplicate`, `/schedule`, `/unschedule`, `/test`), `/audience`, `/contacts` (+ `/:id`, `/tags`, `/unsubscribe`), `/tags`, `/fields`, `/import`, `/look`, `/look/logos` (POST a multipart `file` and `name`; DELETE `/look/logos/<id>`), `/archive` (+ `/:source/:id/content`), `/migrate` (+ `/contacts`, `/archive`; only when the host passes `migrateFrom`). Responses are the stable contract between the hub and its screens. Logos and the archive work even when the provider is not connected (the archive outlives the account it came from).
 
 ## Rules the hub keeps whichever provider is behind it
 
@@ -85,6 +85,39 @@ On most free plans the service's hosted unsubscribe page cannot be branded or re
 4. It cancels a subscribed or held person and answers `ok` for every address, so it cannot be used to look people up. A bounced or already-cancelled person is left as the service has them.
 
 What it cannot promise: anyone who knows an address can unsubscribe it (the link has no login, which is why step 2 asks for a click); and whether the service fills a merge tag inside a link is the service's behavior, so check the first real send. A provider without `unsubscribeByEmail` answers 501 and the hub keeps using the service's link alone.
+
+## Moving from another email service (optional)
+
+A site that is leaving Mailchimp for Kit (or any provider pair with the calls below) can move its list and its sent emails from inside the hub. It is off unless the host passes the old service as `migrateFrom`:
+
+```js
+const hub = createEmailHub({
+  provider: createProvider('kit', { apiKey: env.KIT_API_KEY }),                       // where people go
+  migrateFrom: createProvider('mailchimp', { apiKey: env.MAILCHIMP_API_KEY, listId }), // where they are now
+  store, brand,
+});
+```
+
+`migrate.js` does the work (`createMigration({ from, to, store })`: `plan()`, `contacts({ after })`, `archive({ after })`) and the hub serves it behind the host's admin check:
+
+| Route | Does |
+| --- | --- |
+| `GET /migrate` | Read-only plan: how many people will move, how many stay behind (unsubscribed, cleaned, pending), how many sent emails, what does not move. |
+| `POST /migrate/contacts` `{ agreed: true, after }` | One slice of subscribed people into the new service. Returns `{ moved, alreadyThere, skipped, failed, tagged, total, next }`; call again with `after: next` until it is `null`. |
+| `POST /migrate/archive` `{ after }` | Sent emails into the hub's archive (`store.saveArchived`), a few per request. Same loop. |
+
+`GET /config` carries `migrate: { from } | null`. The screens do not show it yet; a host calls the routes (or the functions) from its own page or script.
+
+Rules it keeps, which is why it is safe to stop and run again:
+
+- **Only subscribed people move.** Unsubscribed, cleaned and pending people stay behind and are counted. Moving people needs the `agreed` tick, like adding one contact.
+- **Nobody who left comes back.** The destination's `addContact` never changes the state of someone who unsubscribed there; that person is counted as `alreadyThere` and gets no tags.
+- **Nothing is sent and the old service is only read.**
+- **Bounded requests.** A call stops after `budget` provider calls (default 40) so it fits a Worker; the `after` cursor resumes mid-page. Every call is an upsert, so a repeat run duplicates nobody.
+- **A failure for one person is counted, not fatal, and the result never carries an address or a service's reply.**
+- **Sent emails become read-only history** (a service like Kit cannot take sent emails), keyed by source and id, so a second run updates the same rows.
+
+Not moved: drafts, templates, automations, last names (the Kit adapter keeps first names only) and each person's original signup date. A host that needs those writes its own importer; `kit.fields` (see the provider options) is where a host keeps the original signup date.
 
 ## Adapting to the site it is in
 
@@ -266,6 +299,7 @@ Who is subscribed, what was sent and how it did stay in the email service; the h
 ```
 node email-hub/hub.test.mjs     # the hub end to end on Mailchimp, over a fake network
 node email-hub/kit.test.mjs     # the Kit provider, the memory provider, unsubscribe through the site
+node email-hub/migrate.test.mjs # moving a list between services (Mailchimp -> Kit over fake networks)
 node email-hub/store.test.mjs   # the database store, built from schema.js, plus the archive
 ```
 
@@ -289,6 +323,7 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 
 ## Version history
 
+- **3.25.0**: Optional move from another email service (`migrate.js`, `createEmailHub({ migrateFrom })`, routes `GET /migrate`, `POST /migrate/contacts`, `POST /migrate/archive`; `GET /config` adds `migrate`). Moves subscribed people with their first name and tags, never brings back anyone who unsubscribed, and archives sent emails; a bounded, resumable, repeatable run. Off unless `migrateFrom` is set. Additive; no schema change.
 - **3.24.0**: Kit. `createKitProvider({ formId })` adds `subscribeWithConfirmation({ email, first })`: a sign-up through a Kit form, so Kit emails the person to confirm (double opt-in) and no API key is sent; with no `formId` it refuses rather than adding anyone unconfirmed. Documented two Kit rules hosts hit: a template needs `{{ unsubscribe_link }}` and `{{ address }}` or Kit disables sending (so a message-only `newTemplateId` template needs a slim footer), and `{{ address }}` is Kit's own address until Settings > Email is filled in. Additive; no schema change.
 - **3.23.0**: Picture fields. A layout field of `type: 'image'` (or a `url` field whose label or key says picture, image, photo, banner or poster) gets **Choose from the picture library**, **Upload a new picture** and a thumbnail of the picture now in the box, under its normal address box. The library is the host's own (`GET /look` `logos`, uploads through `POST /look/logos`, so a picture uploaded here is saved in the same library as the logos), the built-in logo is left out, and an address can still be pasted. Uploading only shows when the host's store can take uploads. Additive; no schema change.
 - **3.21.1**: Fix: web address fields (a layout's link or picture address) had no style, so they drew as bare text and did not look like something to click into; they now look like every other field. Web-address fields with no hint of their own say what to paste. `ui.test.mjs` fails if a field type used by the screens has no style.
