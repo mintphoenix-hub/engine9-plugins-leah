@@ -35,6 +35,12 @@ const ROUTE = /^\/(campaigns|audience|overview|contacts|tags|fields|import|look|
 export function createEmailHub({ provider, migrateFrom = null, brand = {}, store = null, now = () => Date.now(), schedule = {}, people = null, templates = null, defaultTemplate = '', layouts = null, layoutTemplateId = '', newTemplateId = '', templateSample = '' } = {}) {
   checkLayouts(layouts);
   const rules = scheduleRules(schedule);
+  /* "Everyone except this tag": only a service that can do it (capabilities.excludeAudience), and only a plain id. */
+  const excludeTo = (tag) => {
+    if (!caps.excludeAudience) throw new HubError('That is not something this email service can do from here.', 405);
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(String(tag))) throw new HubError('That is not a tag we know.', 404);
+    return { excludeTagId: String(tag) };
+  };
   assertProvider(provider);
   const caps = capabilitiesOf(provider);
   if (migrateFrom) assertProvider(migrateFrom);
@@ -105,7 +111,7 @@ export function createEmailHub({ provider, migrateFrom = null, brand = {}, store
       // The template a new email is sent in: the one chosen, else the host's `newTemplateId` (a template that only holds the message, for a host
       // whose emails are whole designed emails), else the service's own default.
       const tid = (await knownTemplate(b.templateId)) || (newTemplateId ? String(newTemplateId) : '');   // only a person's choice is checked; the host's own default is trusted, so a template list that is down cannot stop an email being written
-      const c = await provider.createCampaign({ subject, previewText: clip(b.previewText, 150).trim(), title: clip(b.title, 100).trim(), html, to: parseTo(b.to), ...(tid ? { templateId: tid } : {}) });
+      const c = await provider.createCampaign({ subject, previewText: clip(b.previewText, 150).trim(), title: clip(b.title, 100).trim(), html, to: { ...parseTo(b.to), ...(b.excludeTag ? excludeTo(b.excludeTag) : {}) }, ...(tid ? { templateId: tid } : {}) });
       return json(200, { campaign: c, ...(warnings.length ? { warnings } : {}) });
     }
     if (id && !action) {

@@ -80,8 +80,16 @@ export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, 
   const id = (v, what = 'email') => { if (!ID.test(String(v))) throw new HubError(`That is not a ${what} we know.`, 404); return String(v); };
   const email = (v) => { const a = String(v || '').trim().toLowerCase(); if (!EMAIL.test(a)) throw new HubError('That does not look like an email address.'); return a; };
 
-  const filter = ({ tagId, segmentId } = {}) => (segmentId ? [{ all: [{ type: 'segment', ids: [Number(id(segmentId, 'segment'))] }] }]
-    : tagId ? [{ all: [{ type: 'tag', ids: [Number(id(tagId, 'tag'))] }] }] : []);
+  /* Kit's API takes ONE kind of filter group per broadcast (all, any or none, never mixed), so "everyone except a tag" cannot
+     also be narrowed to a tag or segment: that is refused here instead of sending to the wrong people. */
+  const filter = ({ tagId, segmentId, excludeTagId } = {}) => {
+    if (excludeTagId) {
+      if (tagId || segmentId) throw new HubError('Kit can send to everyone except a tag, or to one tag or segment, but not both at once.', 422);
+      return [{ none: [{ type: 'tag', ids: [Number(id(excludeTagId, 'tag'))] }] }];
+    }
+    return segmentId ? [{ all: [{ type: 'segment', ids: [Number(id(segmentId, 'segment'))] }] }]
+      : tagId ? [{ all: [{ type: 'tag', ids: [Number(id(tagId, 'tag'))] }] }] : [];
+  };
 
   function shape(b, stats = null) {
     const f = Array.isArray(b?.subscriber_filter) ? b.subscriber_filter : [];
@@ -90,7 +98,7 @@ export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, 
     return {
       id: String(b.id), status: STATUS[String(b.status || '').toLowerCase()] || 'save',
       subject: b.subject || '', title: b.description || '', preview: b.preview_text || '',
-      audience: 'Kit', segment: aimed ? (JSON.stringify(f).includes('"segment"') ? 'A segment' : 'A tag') : '',
+      audience: 'Kit', segment: aimed ? (f.some((x) => Array.isArray(x?.none) && x.none.length) ? 'Everyone except a tag' : JSON.stringify(f).includes('"segment"') ? 'A segment' : 'A tag') : '',
       recipients, created: b.created_at || null, when: b.send_at || b.published_at || null, sent: recipients,
       openRate: stats?.openRate ?? null, clickRate: stats?.clickRate ?? null,
       stats: { opened: stats?.opened ?? null, clicked: stats?.clicked ?? null },
@@ -126,7 +134,7 @@ export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, 
   return {
     label: 'Kit',
     mergeTags: { address: '{{ address }}', unsubscribe: '{{ unsubscribe_url }}', email: '{{ subscriber.email_address }}' },
-    capabilities: { import: false, checklist: false, test: false, layouts: true, templateChange: true },
+    capabilities: { import: false, checklist: false, test: false, layouts: true, templateChange: true, excludeAudience: true },
     connected: () => Boolean(key),
     appUrl: (path = '/') => `${appUrl}${path === '/' ? '' : path}`,
     editUrl: (c) => c.editUrl,
@@ -207,7 +215,8 @@ export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, 
       return { added, unsubscribed, net: num(s.net_new_subscribers) ?? added - unsubscribed };
     }),
 
-    listContacts: guard(async ({ status = 'subscribed', tag, email: q, after } = {}) => {
+    listContacts: guard(async ({ status = 'subscribed', tag, email: q, after, perPage } = {}) => {
+      const per = Math.min(1000, Math.max(1, Number.parseInt(perPage, 10) || 25));
       if (q) {
         const a = String(q).trim().toLowerCase();
         if (!EMAIL.test(a)) throw new HubError('That does not look like a full email address.');
@@ -218,8 +227,8 @@ export function createKitProvider({ apiKey, fetch: inject = null, sleep = null, 
       if (!TO_KIT[status]) throw new HubError('That is not a kind of contact.');
       const cursor = after ? `&after=${encodeURIComponent(String(after))}` : '';
       const path = tag
-        ? `/tags/${id(tag, 'tag')}/subscribers?status=${TO_KIT[status]}&per_page=25&include_total_count=true${cursor}`
-        : `/subscribers?status=${TO_KIT[status]}&per_page=25&include_total_count=true&sort_field=created_at&sort_order=desc${cursor}`;
+        ? `/tags/${id(tag, 'tag')}/subscribers?status=${TO_KIT[status]}&per_page=${per}&include_total_count=true${cursor}`
+        : `/subscribers?status=${TO_KIT[status]}&per_page=${per}&include_total_count=true&sort_field=created_at&sort_order=desc${cursor}`;
       let d;
       try { d = await kit(path); } catch (e) {
         // `sort_field=created_at` is not a documented sort field; if Kit ever refuses it, fall back to its own order.

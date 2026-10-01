@@ -15,7 +15,8 @@
     listCampaigns()             { campaigns: [Campaign], dc? }
     getCampaign(id)             Campaign, freshly read
     campaignContent(id)         { html, template? }   template: the name of the service-side template the email is sent in, when it has one
-    createCampaign(input)       Campaign      input: { subject, previewText, title, html, to: { tagId?, segmentId? } }
+    createCampaign(input)       Campaign      input: { subject, previewText, title, html, to: { tagId?, segmentId?, excludeTagId? } }
+                                              excludeTagId = everyone except that tag (capabilities.excludeAudience; not combined with tagId/segmentId)
     updateCampaign(id, fields)  Campaign      fields: { subject?, previewText?, title? }
     deleteCampaign(id)          {}
     duplicateCampaign(id)       Campaign
@@ -28,7 +29,7 @@
     sendChecklist(id)           { ready, problems: [{heading, details}] }
     sendTest(id, emails)        { sentTo }
     campaignReport(id)          { recipients, opened, openRate, clicked, clickRate, unsubscribed, bounced }
-    listContacts(query)         { contacts: [Contact], total, next }  query: { status, tag, email, after }
+    listContacts(query)         { contacts: [Contact], total, next }  query: { status, tag, email, after, perPage? }   perPage 1-1000 (default 25)
     contact(id) / addContact(input) / tagContact(id, name, active) / unsubscribeContact(id)
     createTag(name)             { tag }
     fields()                    { fields: [{ tag, name, type, required }] }
@@ -66,7 +67,7 @@ export function capabilitiesOf(p) {
   const c = {
     checklist: has('sendChecklist'), test: has('sendTest'), report: has('campaignReport'),
     contacts: has('listContacts', 'contact'), tags: has('createTag', 'tagContact'), segments: true, fields: has('fields'),
-    import: has('importContacts'), editDesign: has('editUrl'), templates: has('listTemplates'), look: true, layouts: false, templateChange: false
+    import: has('importContacts'), editDesign: has('editUrl'), templates: has('listTemplates'), look: true, layouts: false, templateChange: false, excludeAudience: false
   };
   return { ...c, ...(p.capabilities || {}) };
 }

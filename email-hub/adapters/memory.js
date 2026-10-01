@@ -16,7 +16,7 @@ export function createMemoryProvider({ now = () => Date.now() } = {}) {
   const nid = () => String(seq++);
   const contacts = new Map(), tags = new Map(), campaigns = new Map();
   const iso = () => new Date(now()).toISOString();
-  const shape = (c) => ({ id: c.id, status: c.status, subject: c.subject, title: c.title, preview: c.preview, audience: 'Memory', segment: c.to?.tagId ? 'A tag' : c.to?.segmentId ? 'A segment' : '',
+  const shape = (c) => ({ id: c.id, status: c.status, subject: c.subject, title: c.title, preview: c.preview, audience: 'Memory', segment: c.to?.excludeTagId ? 'Everyone except a tag' : c.to?.tagId ? 'A tag' : c.to?.segmentId ? 'A segment' : '',
     recipients: c.sent ?? null, created: c.created, when: c.when || null, sent: c.sent ?? null, openRate: c.openRate ?? null, clickRate: c.clickRate ?? null, stats: { opened: c.opened ?? null, clicked: c.clicked ?? null }, archiveUrl: null, editUrl: null });
   const camp = (id) => { const c = campaigns.get(String(id)); if (!c) throw new HubError('That is not an email we know.', 404); return c; };
   const person = (id) => { const c = contacts.get(String(id)); if (!c) throw new HubError('That is not a contact we know.', 404); return c; };
@@ -26,7 +26,7 @@ export function createMemoryProvider({ now = () => Date.now() } = {}) {
   const p = {
     label: 'Memory',
     mergeTags: { address: '{{ address }}', unsubscribe: '{{ unsubscribe_url }}', email: '{{ email }}' },
-    capabilities: { layouts: true, templateChange: true },
+    capabilities: { layouts: true, templateChange: true, excludeAudience: true },
     connected: () => true,
     appUrl: () => 'https://memory.invalid/',
     editUrl: () => null,

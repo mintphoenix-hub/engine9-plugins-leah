@@ -25,6 +25,9 @@
 
 /* layout: a left column with Create and the five pages, and the page beside it */
 .eh-hub{display:grid;grid-template-columns:12.5rem minmax(0,1fr);gap:1.6rem 2.2rem;align-items:start}
+.eh-accounts{display:flex;gap:.6rem;align-items:center;margin-bottom:1rem}
+.eh-accounts label{opacity:.75;font-size:.9rem}
+.eh-accounts select{min-height:2.4rem;padding:0 .8rem;border-radius:var(--eh-radius);border:1px solid rgba(128,128,128,.4);background:transparent;color:inherit;font:inherit}
 .eh-nav{position:sticky;top:1rem}
 .eh-nav ul{display:grid;gap:.15rem;margin-top:1rem}
 .eh-nav li button{display:flex;gap:.7rem;align-items:center;width:100%;min-height:2.7rem;padding:0 .8rem;background:none;border:0;border-radius:var(--eh-radius);color:var(--eh-soft);text-align:left;cursor:pointer;transition:background .15s,color .15s}

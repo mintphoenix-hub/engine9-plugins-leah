@@ -86,6 +86,69 @@ On most free plans the service's hosted unsubscribe page cannot be branded or re
 
 What it cannot promise: anyone who knows an address can unsubscribe it (the link has no login, which is why step 2 asks for a click); and whether the service fills a merge tag inside a link is the service's behavior, so check the first real send. A provider without `unsubscribeByEmail` answers 501 and the hub keeps using the service's link alone.
 
+## More than one email account
+
+A site with two lists on two accounts (two Kit accounts, or a Kit and a Mailchimp) gives each account its own hub and routes to the right one with `createEmailHubs`:
+
+```js
+import { createEmailHubs, createProvider, createD1Store } from '@mintphoenix/plugins/email-hub';
+
+const hubs = createEmailHubs({
+  accounts: {
+    main:  { label: 'Main list',  provider: createProvider('kit', { apiKey: env.KIT_API_KEY }),       store: createD1Store({ db: env.DB, tablePrefix: '' }),       brand: { name: 'Example' } },
+    other: { label: 'Other list', provider: createProvider('kit', { apiKey: env.OTHER_KIT_API_KEY }), store: createD1Store({ db: env.DB, tablePrefix: 'other_' }), brand: { name: 'Other' } },
+  },
+  // anything else here is a default for every account; an account's own value wins
+});
+
+// in the host's route, after the admin check:  /api/admin/email/<rest>
+const res = await hubs.handle(request, rest, request.method);   // null when the path is not the hub's
+```
+
+| Path | Does |
+| --- | --- |
+| `GET /accounts` | `{ accounts: [{ id, label, service, connected }] }` for the switcher. |
+| `/<account id>/<hub route>` | That account's hub: `/main/campaigns`, `/other/audience`, `/main/migrate`, and so on. |
+
+- **Each account is a whole hub:** its own provider, look, logos, archive, templates, layouts and options (`migrateFrom` included). Nothing is shared unless it is passed as a default.
+- **Keep the tables apart.** Give each account its own `createD1Store({ tablePrefix })`; two accounts on one store would share a look and an archive. The plugin's own tables are the empty-prefix set; for another account, generate the same DDL under the prefix (`standardizeSchema` + `buildCreateTable` with `table: prefix + table.name`).
+- **Ids** are lower-case letters, numbers, `-` and `_`, starting with a letter; `accounts` is reserved. A missing provider or a bad id throws when the hubs are built, not at the first request.
+- **A single account still works the old way:** `createEmailHub` is unchanged.
+
+In the browser, `mountEmailHubs` (`ui/accounts.js`) puts a switcher above the screens and mounts one hub per account at `<base>/<account id>`:
+
+```js
+import { mountEmailHubs } from '/email-hub/accounts.js';
+const ui = mountEmailHubs(document.getElementById('email'), {
+  base: '/api/admin/email',
+  accounts: [{ id: 'main', label: 'Main list' }, { id: 'other', label: 'Other list', brandName: 'Other' }],
+  timeZone: 'America/New_York', theme: true,           // every other option is the one mountEmailHub takes
+});
+ui.show('other'); ui.account; ui.destroy();
+```
+
+It starts on `account`, else the one used last in this browser, else the first. A draft kept in the browser is kept per account, so words written for one list never appear in another. With no `accounts` it is exactly `mountEmailHub`. A host that copies the screens into its own tree starts from `ui/accounts.js` (it imports `ui/hub.js`).
+
+### Sending to either list, or to both, without anyone getting it twice
+
+Two lists are often not separate people: someone can be on both. `createEmailHubs` (above) serves a `/send` flow so an email can go to **one list, the other, or both**, and nobody is emailed twice. Everything it counts or does is about people who **can be emailed** (subscribed); people who unsubscribed, bounced or are waiting are never counted and never sent to.
+
+| Path | Does |
+| --- | --- |
+| `GET /send/plan?primary=main&secondary=other` | Read-only: `{ primary: { canEmail }, secondary: { canEmail }, onBoth, secondGets, uniquePeople, summary }`. `summary` is a plain sentence: *"8 people can be emailed on the first list and 8 people on the second. 3 people are on both, so sending to both lists reaches 13 people, and each gets one email."* |
+| `POST /send/mark` `{ primary, secondary, after }` | Tags the second list's people who are also on the first (`Also on <first list>`). Bounded; call again with `after: next` until it is `null`. Repeatable, and it removes the tag from anyone who has since left the first list. |
+| `POST /send/draft` `{ audiences: ['main'] \| ['other'] \| ['main','other'], primary?, to?, ...the email }` | One audience is an ordinary draft from that account. Two make a pair: the first list's draft goes to everyone on it (or a tag, `to: { main: 't:12' }`), the second's goes to **everyone except the overlap tag**. Returns `drafts`, and for a pair `tag` and `needsMark: true`. |
+| `POST /send/schedule` `{ drafts: [{ account, id }], sendAt, confirm, marked }` | One draft goes through that account's usual guarded scheduling. A pair needs `marked: true` (you updated the overlap just now), must be one email from each list, and the second must really be an "everyone except" draft. The first is scheduled, then the second; if the second fails the first is taken back, so a pair is never left half scheduled. |
+
+Rules that matter:
+
+- **You choose which list keeps the people on both.** The `primary` list is emailed in full; the other list skips whoever is already on it. Choosing the larger list first reaches the most people with the fewest tags.
+- **Mark again right before scheduling.** The overlap is the people on both lists *now*; people who joined or left since the last mark are not counted until the next one.
+- **The second list cannot also be narrowed** to a tag or segment: Kit takes one kind of filter per email (everyone, a tag, a segment, or everyone *except* a tag), so the plugin refuses the combination instead of sending to the wrong people. The first list can still be narrowed.
+- **The service of the second list must be able to send to "everyone except a tag"** (`capabilities.excludeAudience`: Kit and the in-memory provider; not Mailchimp). Otherwise the pair is refused and the first draft removed.
+- **Nothing is sent by this flow.** Drafts and scheduling use each account's own hub rules (drafts only, the tick, notice, quarter hours). The first list is only read; the tag is only added to or removed from the second list.
+- Lists are compared by reading every subscribed address, 1000 a call; past 30,000 people a list is too large to compare here.
+
 ## Moving from another email service (optional)
 
 A site that is leaving Mailchimp for Kit (or any provider pair with the calls below) can move its list and its sent emails from inside the hub. It is off unless the host passes the old service as `migrateFrom`:
@@ -300,6 +363,8 @@ Who is subscribed, what was sent and how it did stay in the email service; the h
 node email-hub/hub.test.mjs     # the hub end to end on Mailchimp, over a fake network
 node email-hub/kit.test.mjs     # the Kit provider, the memory provider, unsubscribe through the site
 node email-hub/migrate.test.mjs # moving a list between services (Mailchimp -> Kit over fake networks)
+node email-hub/accounts.test.mjs # more than one account in one hub, and the switcher
+node email-hub/send.test.mjs     # sending to either list or both without duplicates (two fake Kit accounts)
 node email-hub/store.test.mjs   # the database store, built from schema.js, plus the archive
 ```
 
@@ -323,6 +388,8 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 
 ## Version history
 
+- **3.27.0**: Send to either list, or both, without anyone getting it twice: `GET /send/plan`, `POST /send/mark`, `POST /send/draft`, `POST /send/schedule` on `createEmailHubs` (`crosslist.js`). Counts only people who can be emailed; marks the second list's people who are on the first and addresses its email to everyone except that tag; a pair is scheduled together and rolled back if half fails. Providers: `createCampaign` accepts `to.excludeTagId` and `capabilities.excludeAudience` says who can (Kit, memory); `listContacts` accepts `perPage` (1-1000). `POST /campaigns` accepts `excludeTag`. `accounts` lists `canExclude`. Additive; no schema change.
+- **3.26.0**: More than one email account in one hub: `createEmailHubs({ accounts })` (`accounts.js`) routes `/accounts` and `/<account id>/<hub route>` to a whole hub per account (own provider, store, brand and options), and `mountEmailHubs` (`ui/accounts.js`) adds an account switcher over the screens, one hub and one browser draft per account. `createEmailHub` is unchanged. Additive; no schema change (give each account its own store `tablePrefix`).
 - **3.25.0**: Optional move from another email service (`migrate.js`, `createEmailHub({ migrateFrom })`, routes `GET /migrate`, `POST /migrate/contacts`, `POST /migrate/archive`; `GET /config` adds `migrate`). Moves subscribed people with their first name and tags, never brings back anyone who unsubscribed, and archives sent emails; a bounded, resumable, repeatable run. Off unless `migrateFrom` is set. Additive; no schema change.
 - **3.24.0**: Kit. `createKitProvider({ formId })` adds `subscribeWithConfirmation({ email, first })`: a sign-up through a Kit form, so Kit emails the person to confirm (double opt-in) and no API key is sent; with no `formId` it refuses rather than adding anyone unconfirmed. Documented two Kit rules hosts hit: a template needs `{{ unsubscribe_link }}` and `{{ address }}` or Kit disables sending (so a message-only `newTemplateId` template needs a slim footer), and `{{ address }}` is Kit's own address until Settings > Email is filled in. Additive; no schema change.
 - **3.23.0**: Picture fields. A layout field of `type: 'image'` (or a `url` field whose label or key says picture, image, photo, banner or poster) gets **Choose from the picture library**, **Upload a new picture** and a thumbnail of the picture now in the box, under its normal address box. The library is the host's own (`GET /look` `logos`, uploads through `POST /look/logos`, so a picture uploaded here is saved in the same library as the logos), the built-in logo is left out, and an address can still be pasted. Uploading only shows when the host's store can take uploads. Additive; no schema change.
