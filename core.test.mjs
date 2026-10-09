@@ -39,10 +39,10 @@ let core = 'unknown';
 try { core = JSON.parse(readFileSync(new URL('node_modules/@engine9/core/package.json', here), 'utf8')).version; } catch { /* label only */ }
 console.log(`core ${core}; plugins: ${dirs.join(', ')}\n`);
 
-/* core installs its own base plugin (@engine9/interfaces/plugin) first, so the worker needs a registry that
-   knows the published interfaces as well as ours. A scratch project lists only @engine9/interfaces. */
+/* core installs its own base plugin (@engine9/schemas/plugin) first, so the worker needs a registry that
+   knows the published schemas as well as ours. A scratch project lists only @engine9/schemas. */
 const scratch = mkdtempSync(path.join(tmpdir(), 'e9-compat-'));
-writeFileSync(path.join(scratch, 'package.json'), JSON.stringify({ type: 'module', engine9: { pluginPackages: ['@engine9/interfaces'] } }));
+writeFileSync(path.join(scratch, 'package.json'), JSON.stringify({ type: 'module', engine9: { pluginPackages: ['@engine9/schemas'] } }));
 symlinkSync(fileURLToPath(new URL('node_modules', here)), path.join(scratch, 'node_modules'), 'dir');
 const interfaces = createNodePluginRegistry({ cwd: scratch });
 

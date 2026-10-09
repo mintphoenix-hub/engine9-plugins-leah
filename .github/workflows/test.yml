@@ -1,7 +1,7 @@
 # Tests the plugins on every push, and every day against the NEWEST engine9 core.
 #
 # package.json asks for core straight from its repository (no fixed version) and there is no
-# lockfile on purpose, so each run installs whatever core and @engine9/interfaces are current. If a
+# lockfile on purpose, so each run installs whatever core and @engine9/schemas are current. If a
 # core release breaks a plugin, this fails the morning it happens and opens an issue, instead of a
 # site finding out when it next updates.
 name: test

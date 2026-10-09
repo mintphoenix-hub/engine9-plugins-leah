@@ -200,7 +200,7 @@ Nothing is read, observed or listened to until the screens are mounted with `the
 
 ## Connection to engine9 core
 
-Core keeps its own record of every person and of whether each address may be emailed (`person` and `person_email`, the standard tables of `@engine9/interfaces/person` and `person_email`; `person_email.subscription_status` is Subscribed, Unsubscribed, Not Subscribed, Bouncing or Spam). The plugin declares the person interface it relies on (`metadata.dependencies`) and, when the host passes `people`, keeps core in step with the email service:
+Core keeps its own record of every person and of whether each address may be emailed (`person` and `person_email`, the standard tables of `@engine9/schemas/person` and `person_email`; `person_email.subscription_status` is Subscribed, Unsubscribed, Not Subscribed, Bouncing or Spam). The plugin declares the person interface it relies on (`metadata.dependencies`) and, when the host passes `people`, keeps core in step with the email service:
 
 ```js
 import { createCorePeople, createEmailHub } from '@mintphoenix/plugins/email-hub';
@@ -388,6 +388,7 @@ Mailchimp and Kit are tested the same way. `conformance.test.mjs` runs one scena
 
 ## Version history
 
+- **4.0.0** (breaking): needs `@engine9/core` 1.9.1 or later and `@engine9/schemas` 1.9.0 or later. engine9 renamed `@engine9/interfaces` to `@engine9/schemas`, so the plugin now depends on `@engine9/schemas/person`. No table, column or setting changes. A site on core 1.4 stays on 3.x.
 - **3.27.0**: Send to either list, or both, without anyone getting it twice: `GET /send/plan`, `POST /send/mark`, `POST /send/draft`, `POST /send/schedule` on `createEmailHubs` (`crosslist.js`). Counts only people who can be emailed; marks the second list's people who are on the first and addresses its email to everyone except that tag; a pair is scheduled together and rolled back if half fails. Providers: `createCampaign` accepts `to.excludeTagId` and `capabilities.excludeAudience` says who can (Kit, memory); `listContacts` accepts `perPage` (1-1000). `POST /campaigns` accepts `excludeTag`. `accounts` lists `canExclude`. Additive; no schema change.
 - **3.26.0**: More than one email account in one hub: `createEmailHubs({ accounts })` (`accounts.js`) routes `/accounts` and `/<account id>/<hub route>` to a whole hub per account (own provider, store, brand and options), and `mountEmailHubs` (`ui/accounts.js`) adds an account switcher over the screens, one hub and one browser draft per account. `createEmailHub` is unchanged. Additive; no schema change (give each account its own store `tablePrefix`).
 - **3.25.0**: Optional move from another email service (`migrate.js`, `createEmailHub({ migrateFrom })`, routes `GET /migrate`, `POST /migrate/contacts`, `POST /migrate/archive`; `GET /config` adds `migrate`). Moves subscribed people with their first name and tags, never brings back anyone who unsubscribed, and archives sent emails; a bounded, resumable, repeatable run. Off unless `migrateFrom` is set. Additive; no schema change.

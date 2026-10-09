@@ -4,7 +4,7 @@
 
 Working on it or wiring it in, with or without an assistant? Read [AGENTS.md](../AGENTS.md) for the rules.
 
-It is a **native plugin** (`metadata.unique: true`, no `metadata.prefix`) that depends on `@engine9/interfaces/person` (`>=1.7.0`). It needs `@engine9/core` 1.4.0 or later and `@engine9/interfaces` 1.8.0 or later. The release version is the npm `package.json` version only; the plugin declares no `metadata.version`. It owns the schema, the settings, the console screens and the pure parsing logic. Everything that touches your users, your notifications and your identity stays in your application, so nothing in the plugin assumes a particular product.
+It is a **native plugin** (`metadata.unique: true`, no `metadata.prefix`) that depends on `@engine9/schemas/person` (`>=1.9.0`). It needs `@engine9/core` 1.9.1 or later and `@engine9/schemas` 1.9.0 or later (core 1.4 to 1.8 used `@engine9/interfaces`: stay on 3.x there). The release version is the npm `package.json` version only; the plugin declares no `metadata.version`. It owns the schema, the settings, the console screens and the pure parsing logic. Everything that touches your users, your notifications and your identity stays in your application, so nothing in the plugin assumes a particular product.
 
 ## Install
 
@@ -12,8 +12,8 @@ It is a **native plugin** (`metadata.unique: true`, no `metadata.prefix`) that d
 
    ```json
    {
-     "dependencies": { "@mintphoenix/plugins": "github:mintphoenix-hub/engine9-plugins-leah#v3.4.1" },
-     "engine9": { "pluginPackages": ["@engine9/interfaces", "@mintphoenix/plugins"] }
+     "dependencies": { "@mintphoenix/plugins": "github:mintphoenix-hub/engine9-plugins-leah#v4.0.0" },
+     "engine9": { "pluginPackages": ["@engine9/schemas", "@mintphoenix/plugins"] }
    }
    ```
 
@@ -275,6 +275,7 @@ node board/helpers.test.mjs
 
 The version is the npm package version in `package.json` (currently 3.4.1), which covers the whole package. Nothing else records it.
 
+- **4.0.0** (breaking): engine9 renamed `@engine9/interfaces` to `@engine9/schemas` (core 1.9), so the plugin depends on `@engine9/schemas/person` and needs core 1.9.1 or later. No table, column or setting changes; a database only needs core's stored-path rewrite (`docs/upgrade-1.9.md` in core). A site on core 1.4 to 1.8 stays on 3.x.
 - **3.4.1**: tidy and two fixes, no API or schema change. Accent folding, the `@` boundary and one-line clipping are shared in `text.js` (not exported). A push body cut by `pushMessage` no longer ends in a space before the ellipsis, matching `notificationText`. The `@` picker tests in `mentions.test.mjs` now actually run. Fixes: `findMentions` and `findTags` spans line up with the original text when folding changes its length (an accent typed as its own character, a letter that lower-cases longer); `sendPushes` honours `ttl: 0` instead of replacing it with the 24-hour default.
 - **3.4.0**: push delivery. `webpush.js` (Web Push in WebCrypto: `generateVapidKeys`, `validSubscription`, `vapidAuthorization`, `encryptPayload`, `sendPush`, `pushEnabled`) and `push.js` (`pushRecipients`, `pushMessage`, `subscriptionSql`, `buildPushes`, `sendPushes`), plus a new table, `push_subscription`. Additive: a core-managed account picks the table up when the plugin is reinstalled; any other host runs `migrate-3.4.0.sql` once. No existing table changes.
 - **3.3.0**: composer helpers in `mentions.js` — `mentionQuery(text, caret)`, `suggestMentions(query, people, {limit, exclude})`, `applyMention(text, caret, mention, handle)` — so every host's `@` picker suggests exactly what the server will match. No schema change.
