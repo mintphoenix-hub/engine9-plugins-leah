@@ -35,7 +35,7 @@ console.log('core\'s rules');
   assert.equal(await emailHash(' ADA@example.com'), await emailHash('ada@example.com'), 'core\'s email_hash_v1: sha256 of the trimmed, lower-cased address');
   assert.match(await emailHash('a@b.co'), /^[0-9a-f]{64}$/);
   assert.throws(() => createCorePeople({}), /needs a database/);
-  assert.deepEqual(metadata.dependencies, { '@engine9/interfaces/person': '>=1.7.0' });
+  assert.deepEqual(metadata.dependencies, { '@engine9/schemas/person': '>=1.9.0' });
   ok('an address is normalized and hashed the way core does, and the plugin declares the person interface it relies on');
 }
 

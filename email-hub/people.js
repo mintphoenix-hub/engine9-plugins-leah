@@ -2,7 +2,7 @@
   The email hub's connection to engine9 core's people.
 
   Core keeps its own record of every person and of whether each of their addresses may be emailed: `person` and `person_email`
-  (the standard tables of `@engine9/interfaces/person` and `person_email`), with `person_email.subscription_status` one of
+  (the standard tables of `@engine9/schemas/person` and `person_email`), with `person_email.subscription_status` one of
   Subscribed, Unsubscribed, Not Subscribed, Bouncing, Spam. The email service (Kit, Mailchimp) keeps its own list. When the two
   disagree, anything that reads core goes on treating a person who left as reachable, so the hub tells core whenever it changes who
   is on the list.

@@ -6,7 +6,7 @@
 
   Core publishes no releases, so "a new release" is a new commit on its main branch. `core-tested.json` records the
   commit this package was last tested against. When core has moved, this
-    1. installs the newest core and interfaces (package.json asks for core straight from its repository),
+    1. installs the newest core and schemas (package.json asks for core straight from its repository),
     2. runs every test, including core.test.mjs, which installs each plugin with core's own PluginWorker,
     3. if they pass: records the new commit in core-tested.json and bumps the patch version,
     4. writes a report and a small status file for .github/workflows/core-updates.yml, which opens a pull request

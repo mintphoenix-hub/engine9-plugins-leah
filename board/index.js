@@ -11,7 +11,7 @@ const metadata = {
   name: 'Board',
   unique: true,
   dependencies: {
-    '@engine9/interfaces/person': '>=1.7.0'
+    '@engine9/schemas/person': '>=1.9.0'
   },
   schemas: ['schema.js']
 };
