@@ -13,7 +13,7 @@ import { checkLayouts, listLayouts, cleanValues, renderLayout } from './layouts.
 import { assertProvider, capabilitiesOf, HubError } from './provider.js';
 import { createMigration } from './migrate.js';
 import { planSchedule, isDraft, scheduleRules } from './schedule.js';
-import { bodyHtml, textFromBodyHtml, checkStyle, defaultStyle, StyleError } from './shell.js';
+import { bodyHtml, textFromBodyHtml, checkStyle, defaultStyle, accountLinkOf, StyleError } from './shell.js';
 import { cleanEmailHtml, checkEmailHtml, MAX_HTML } from './pasted.js';
 import { cleanPeople, isEmail, MAX_IMPORT } from './csv.js';
 import { emailsIn } from './stats.js';
@@ -303,7 +303,7 @@ export function createEmailHub({ provider, migrateFrom = null, brand = {}, store
     const [, area, id, sub] = m || [];
     const url = new URL(request.url);
     try {
-      if (area === 'config') return json(200, { newTemplateId: String(newTemplateId || ''), layoutTemplateId: String(layoutTemplateId || ''), label: provider.label, migrate: migration ? { from: migrateFrom.label } : null, capabilities: caps, brand: { name: brand.name || '' }, appUrl: provider.appUrl('/'), unsubscribePage: brand.unsubscribePage || null, schedule: rules, mergeTags: { unsubscribe: provider.mergeTags.unsubscribe, address: provider.mergeTags.address } });
+      if (area === 'config') return json(200, { newTemplateId: String(newTemplateId || ''), layoutTemplateId: String(layoutTemplateId || ''), label: provider.label, migrate: migration ? { from: migrateFrom.label } : null, capabilities: caps, brand: { name: brand.name || '' }, accountLink: accountLinkOf(brand), appUrl: provider.appUrl('/'), unsubscribePage: brand.unsubscribePage || null, schedule: rules, mergeTags: { unsubscribe: provider.mergeTags.unsubscribe, address: provider.mergeTags.address } });
       // Logos and the archive do not need the service to be connected (the archive outlives it).
       if (isExtra) return (await extras(request, path, method)) || json(405, { error: 'That is not something we do.' });
       if (!provider.connected()) {

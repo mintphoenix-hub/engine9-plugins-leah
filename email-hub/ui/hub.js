@@ -21,7 +21,7 @@
     extras.homeCards()        -> [{ title, html }]           extra cards on Home, under Recent campaigns (host-trusted HTML)
     extras.homeBanner()       -> { html, label, run }        a line at the top of Home, with an optional button
     extras.analyticsBanner()  -> { html, label, run }        the same on Analytics
-  From GET /config the screens also read `schedule: { leadMinutes, stepMinutes }` (default 15 and 15), `capabilities.templates`
+  From GET /config the screens also read `accountLink` (the optional footer line, null when the host sets none; the preview shows it) and `schedule: { leadMinutes, stepMinutes }` (default 15 and 15), `capabilities.templates`
   (lists GET /templates on Content) and GET /archive (read-only emails from a previous service, merged into Past campaigns).
 
   Left nav (Create, Home, Campaigns, Audience, Analytics, Content), laid out like the service's own. Every page reads
@@ -114,7 +114,7 @@ export function mountEmailHub(root, options = {}) {
   async function render() {
     main().innerHTML = '<p class="eh-muted">Loading…</p>';
     try {
-      if (!st.appUrl) { const c = await api('/config').catch(() => null); if (c) { st.newTemplateId = c.newTemplateId || ''; st.label = c.label; st.caps = c.capabilities; st.appUrl = c.appUrl || ''; st.mergeTags = c.mergeTags || {}; if (c.schedule) st.sched = { leadMinutes: Number(c.schedule.leadMinutes) || 15, stepMinutes: Number(c.schedule.stepMinutes) || 15 }; renderNav(); } }
+      if (!st.appUrl) { const c = await api('/config').catch(() => null); if (c) { st.newTemplateId = c.newTemplateId || ''; st.label = c.label; st.caps = c.capabilities; st.appUrl = c.appUrl || ''; st.mergeTags = c.mergeTags || {}; st.accountLink = c.accountLink || null; if (c.schedule) st.sched = { leadMinutes: Number(c.schedule.leadMinutes) || 15, stepMinutes: Number(c.schedule.stepMinutes) || 15 }; renderNav(); } }
       if (st.page === 'home') await home();
       else if (st.page === 'campaigns') await (st.sub === 'new' ? compose() : st.sub === 'report' ? report() : campaigns());
       else if (st.page === 'audience') await audience();
@@ -348,7 +348,7 @@ export function mountEmailHub(root, options = {}) {
     const h = sc.slice(0, 45).join(''), t = sc.slice(45).join('');
     $('#eh-pv-sub').innerHTML = sc.length ? `${esc(h)}${t ? `<span class="dim">${esc(t)}</span>` : ''}` : '<span class="eh-ph">Subject line</span>';
     $('#eh-pv-pre').innerHTML = p ? esc(p) : '<span class="eh-ph">Preview text</span>'; $('#eh-pv-note').classList.toggle('eh-hide', !t); $('#eh-pv-fsub').textContent = s || 'Subject line';
-    if (st.pv === 'open') $('#eh-pv-frame').srcdoc = asHtml ? (hh.trim() ? cleanHtml(hh) : '<p style="font-family:sans-serif;padding:1rem;color:#666">The email you paste appears here.</p>') : bodyHtml(x || 'Your words appear here.', { style: st.look?.style, address: st.look?.mergePreview?.address || 'Your postal address', unsubscribe: '#', brand: { style: st.look?.defaults } });
+    if (st.pv === 'open') $('#eh-pv-frame').srcdoc = asHtml ? (hh.trim() ? cleanHtml(hh) : '<p style="font-family:sans-serif;padding:1rem;color:#666">The email you paste appears here.</p>') : bodyHtml(x || 'Your words appear here.', { style: st.look?.style, address: st.look?.mergePreview?.address || 'Your postal address', unsubscribe: '#', brand: { style: st.look?.defaults, accountLink: st.accountLink } });
     try { localStorage.setItem(draftKey, JSON.stringify({ s, p, t: $('#eh-title').value, x, h: hh, mode: st.bodyMode, to: $('#eh-to').value })); } catch { /* fine without it */ }
   }
   function insert(ch) {
@@ -592,7 +592,7 @@ export function mountEmailHub(root, options = {}) {
       } catch { /* the list is a courtesy; the screen works without it */ }
     }
   }
-  function lookPreview() { const f = $('#lk-pv'); if (f) f.srcdoc = bodyHtml('Hello there,\n\nThis is how the words of an email sit on the card, with a link: https://example.org\n\nWarmly,\n' + (brandName || 'Your name'), { style: st.lookDraft, address: 'Your postal address', unsubscribe: '#', brand: { style: st.look?.defaults } }); }
+  function lookPreview() { const f = $('#lk-pv'); if (f) f.srcdoc = bodyHtml('Hello there,\n\nThis is how the words of an email sit on the card, with a link: https://example.org\n\nWarmly,\n' + (brandName || 'Your name'), { style: st.lookDraft, address: 'Your postal address', unsubscribe: '#', brand: { style: st.look?.defaults, accountLink: st.accountLink } }); }
 
   /* ---- events ---- */
   document.addEventListener('mousedown', outside); document.addEventListener('keydown', onKey);
