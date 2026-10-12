@@ -36,6 +36,8 @@ It is a **native plugin** (`metadata.unique: true`, no `metadata.prefix`) that n
      style: { logoUrl: 'https://example.org/logo.png', footerLine: 'Example, Somewhere' },   // defaults for the look
      isLogoUrl: store.isLogoUrl,                                                             // which logo addresses may be saved
      unsubscribePage: 'https://example.org/#/unsubscribe',                                   // optional, see below
+     accountLink: { url: 'https://example.org/login', label: 'Log in to your Example account',   // optional: one line above Unsubscribe
+                    before: 'Bought tickets?', after: 'to see them and manage your emails.' },
    } });
 
    // in the host's route, after checking the caller is an admin:
@@ -85,6 +87,14 @@ On most free plans the service's hosted unsubscribe page cannot be branded or re
 4. It cancels a subscribed or held person and answers `ok` for every address, so it cannot be used to look people up. A bounced or already-cancelled person is left as the service has them.
 
 What it cannot promise: anyone who knows an address can unsubscribe it (the link has no login, which is why step 2 asks for a click); and whether the service fills a merge tag inside a link is the service's behavior, so check the first real send. A provider without `unsubscribeByEmail` answers 501 and the hub keeps using the service's link alone.
+
+## A link to the recipient's account on your site
+
+If the people you email have an account on your website (a ticket buyer's page, say), set `brand.accountLink` and every email the hub writes gets one extra line above **Unsubscribe**: `<before> <label> <after>`, where the label is the link. Only `url` (https) and `label` are required; `before` and `after` are plain words, escaped when the email is built.
+
+- It is the **same link for everyone**. It is not a sign-in and nothing personal belongs in it: a link that signed someone in by itself would give anyone who held or forwarded the email their account, and mail scanners open links. Point it at your login page, which does the proving.
+- An unsafe or incomplete value (not https, a quote in the address, no label) is ignored, so a host that sets nothing, or sets it badly, gets exactly the footer it always had.
+- `GET /config` returns it as `accountLink` (or `null`) so the screens preview the same footer. A host's own layouts read `brand.accountLink` from the layout context (`ctx.brand`) if they want the same line.
 
 ## More than one email account
 

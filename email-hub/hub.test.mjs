@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createEmailHub } from './routes.js';
 import { createMailchimpProvider } from './adapters/mailchimp.js';
-import { checkStyle, defaultStyle, emailShell, bodyHtml, DEFAULT_STYLE, StyleError } from './shell.js';
+import { checkStyle, defaultStyle, emailShell, bodyHtml, accountLine, DEFAULT_STYLE, StyleError } from './shell.js';
 import { planSchedule } from './schedule.js';
 import { parseCsv, cleanPeople } from './csv.js';
 import { emailsIn } from './stats.js';
@@ -25,6 +25,37 @@ const t = async (name, fn) => {
 };
 const IN_AN_HOUR = new Date(NOW + 3600_000).toISOString();
 const newDraft = (call, over = {}) => call('POST', '/campaigns', { subject: 'Spring gathering', previewText: 'Save the date', text: 'Hello there.\n\nSee https://example.org', ...over });
+
+
+console.log('account link in the footer');
+{
+  const link = { url: 'https://example.org/login', label: 'Log in to your Example account', before: 'Bought tickets?', after: 'to see them.' };
+  const plain = emailShell('x', { address: 'ADDR', unsubscribe: 'UNS', siteUnsubscribe: 'https://example.org/#/unsubscribe', brand });
+  const withLink = emailShell('x', { address: 'ADDR', unsubscribe: 'UNS', siteUnsubscribe: 'https://example.org/#/unsubscribe', brand: { ...brand, accountLink: link } });
+  assert.equal(plain.includes('Log in to'), false, 'a host that sets nothing gets the footer it always had'); n++; console.log('  ok  no accountLink, no change');
+  assert.ok(withLink.includes('Bought tickets? <a href="https://example.org/login"') && withLink.includes('>Log in to your Example account</a> to see them.'));
+  assert.ok(withLink.indexOf('ADDR') < withLink.indexOf('Log in to your Example account') && withLink.indexOf('Log in to your Example account') < withLink.indexOf('>Unsubscribe</a>'), 'between the address and Unsubscribe');
+  assert.equal(withLink.replace(accountLine({ accountLink: link }, defaultStyle(brand)), ''), plain, 'it adds that one line and nothing else'); n++; console.log('  ok  the account link adds one line above Unsubscribe and nothing else');
+  for (const bad of [{ url: 'http://example.org/', label: 'x' }, { url: 'javascript:alert(1)', label: 'x' }, { url: 'https://example.org/"onmouseover="x', label: 'x' }, { url: 'https://example.org/', label: '  ' }, { url: '', label: 'x' }, 'https://example.org/', null, 7]) {
+    assert.equal(accountLine({ accountLink: bad }, DEFAULT_STYLE), '', `ignored: ${JSON.stringify(bad)}`);
+  }
+  n++; console.log('  ok  an unsafe or incomplete accountLink (not https, a quote in the address, no label) is ignored');
+  const esc = accountLine({ accountLink: { url: 'https://example.org/a?b=1&c=2', label: '<b>Hi</b> & "you"', before: '<i>x</i>' } }, DEFAULT_STYLE);
+  assert.ok(!esc.includes('<b>') && !esc.includes('<i>') && esc.includes('&lt;b&gt;Hi&lt;/b&gt; &amp; &quot;you&quot;') && esc.includes('b=1&amp;c=2'));
+  n++; console.log('  ok  the words and the address are escaped');
+  assert.ok(bodyHtml('hello', { address: 'ADDR', unsubscribe: 'UNS', brand: { ...brand, accountLink: link } }).includes('Log in to your Example account'), 'bodyHtml (what the hub writes) carries it');
+  n++; console.log('  ok  an email written in the hub carries the line');
+  // The screens learn the link from GET /config, so the preview can show the same footer; a hub without one says null.
+  const fake = fakeMailchimp({ now: () => NOW });
+  try {
+    const provider = createMailchimpProvider({ apiKey: KEY, listId: 'LIST1' });
+    const asked = async (b) => { const hub = createEmailHub({ provider, brand: b, store: memoryStore(), now: () => NOW }); const r = await hub.handle(new Request('https://x/config'), '/config', 'GET'); return JSON.parse(await r.text()); };
+    assert.deepEqual((await asked({ ...brand, accountLink: link })).accountLink, { url: 'https://example.org/login', label: 'Log in to your Example account', before: 'Bought tickets?', after: 'to see them.' });
+    assert.equal((await asked(brand)).accountLink, null);
+    assert.equal((await asked({ ...brand, accountLink: { url: 'http://insecure.example/', label: 'x' } })).accountLink, null);
+  } finally { fake.restore(); }
+  n++; console.log('  ok  the config route hands the screens the same link (or null), so the preview matches what is saved');
+}
 
 console.log('pure pieces');
 {
