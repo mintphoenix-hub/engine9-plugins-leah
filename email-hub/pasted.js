@@ -31,7 +31,7 @@ export function checkEmailHtml(html, { unsubscribe = '', address = '' } = {}) {
   const text = String(html || '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\*\|[^|]*\|\*|\{\{[^}]*\}\}/g, ' ').trim();   // a merge tag alone is not a message
   if (!text) errors.push('That HTML has no words in it. Paste the whole email, from its opening tag to its closing one.');
   if (unsubscribe && !String(html).includes(unsubscribe)) errors.push(`An email needs an unsubscribe link. Add ${unsubscribe} as the address of a link (for example: <a href="${unsubscribe}">Unsubscribe</a>).`);
-  if (address && !String(html).includes(address) && !/\bPalmwoods|\bQLD\b|\bNSW\b|\bVIC\b|\bSA\b|\bWA\b|\bTAS\b|\bNT\b|\bACT\b|\bAustralia\b/i.test(text)) warnings.push(`There is no postal address in it. You can add ${address}, which the service fills in for you.`);
+  if (address && !String(html).includes(address) && !/\bPalmwoods|\bQLD\b|\bNSW\b|\bVIC\b|\bSA\b|\bWA\b|\bTAS\b|\bNT\b|\bACT\b|\bAustralia\b|\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b|\bUnited States\b/i.test(text)) warnings.push(`There is no postal address in it. You can add ${address}, which the service fills in for you.`);
   if (/<img\b[^>]*\ssrc=["']?(?!https:|\*\||\{\{|cid:|data:)[^"'\s>]+/i.test(html)) warnings.push('Some pictures use an address that is not a full https:// link, so they will not show in a person\'s inbox.');
   return { errors, warnings };
 }

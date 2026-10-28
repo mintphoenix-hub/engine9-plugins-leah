@@ -88,7 +88,7 @@ export function createMailchimpProvider({ apiKey, listId, fromName = '', replyTo
   return {
     label: 'Mailchimp',
     mergeTags: { address: '*|LIST:ADDRESSLINE|*', unsubscribe: '*|UNSUB|*', email: '*|EMAIL|*' },
-    capabilities: { layouts: false, templateChange: false },   // a template is chosen when an email is made; Mailchimp cannot re-wrap a written one
+    capabilities: { layouts: true, templateChange: false },   // layouts: the hub writes the whole email and Mailchimp carries it (a plain HTML campaign). templateChange: a Mailchimp template is chosen when an email is made; Mailchimp cannot re-wrap a written one
     connected,
     appUrl: (path = '/') => (dc ? `https://${dc}.admin.mailchimp.com${path}` : 'https://mailchimp.com/'),
     editUrl: (c) => c.editUrl,

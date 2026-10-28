@@ -159,6 +159,16 @@ Rules that matter:
 - **Nothing is sent by this flow.** Drafts and scheduling use each account's own hub rules (drafts only, the tick, notice, quarter hours). The first list is only read; the tag is only added to or removed from the second list.
 - Lists are compared by reading every subscribed address, 1000 a call; past 30,000 people a list is too large to compare here.
 
+## Mailchimp-first hosts (4.2.0)
+
+A site that runs only on Mailchimp can use the layouts (host-designed emails made by filling in fields) with no patching:
+
+- **Layouts work on the Mailchimp provider.** The hub writes the whole email and Mailchimp carries it as a plain HTML campaign (`capabilities.layouts` is now `true`). A Mailchimp template is still chosen only when an email is made (`templateChange` stays `false`).
+- **Screen options** for `mountEmailHub` (and `mountEmailHubs`): `defaultLayout: 'id'` opens Create on that layout first; `hideServiceLinks: true` leaves out the "Open in <service>" buttons; `plainSaveLabel: true` says "Save draft" rather than "Save draft to <service>". These replace the build-time patches Cosmic Coach used.
+- **Looking like the service:** pass `theme: { vars: { '--eh-accent': '#241C15', '--eh-primary': '#241C15', ... }, observe: false }` to set the `--eh-*` variables explicitly. Set `--eh-primary` and `--eh-on-primary` too, or the screens sample a button color from the page.
+- Colored bars down the left edge of notices and campaign rows are gone (a full border and the status tag carry the meaning).
+- The postal address hint and the "no postal address" check now suit US addresses (street, city, state and ZIP).
+
 ## Moving from another email service (optional)
 
 A site that is leaving Mailchimp for Kit (or any provider pair with the calls below) can move its list and its sent emails from inside the hub. It is off unless the host passes the old service as `migrateFrom`:
