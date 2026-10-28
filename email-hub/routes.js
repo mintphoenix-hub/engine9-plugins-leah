@@ -9,7 +9,7 @@
   scheduling is guarded (schedule.js), only a draft can change or go, and a test send goes only to the addresses given.
 */
 import { pickTemplate, renderTemplate } from './templates.js';
-import { checkLayouts, listLayouts, cleanValues, renderLayout } from './layouts.js';
+import { checkLayouts, listLayouts, cleanValues, renderLayout, replyToOf } from './layouts.js';
 import { assertProvider, capabilitiesOf, HubError } from './provider.js';
 import { createMigration } from './migrate.js';
 import { planSchedule, isDraft, scheduleRules } from './schedule.js';
@@ -93,7 +93,7 @@ export function createEmailHub({ provider, migrateFrom = null, brand = {}, store
         const lay = layouts?.[b.layout];
         if (!lay || !layoutsOn()) throw new HubError('That kind of email is not switched on here.', 404);
         const values = cleanValues(lay, b.values);
-        const made = await provider.createCampaign({ subject, previewText: clip(b.previewText, 150).trim(), title: clip(b.title, 100).trim(), html: renderLayout(lay, values, await layoutCtx()), to: parseTo(b.to), ...(layoutTemplateId ? { templateId: layoutTemplateId } : {}) });
+        const made = await provider.createCampaign({ subject, previewText: clip(b.previewText, 150).trim(), title: clip(b.title, 100).trim(), html: renderLayout(lay, values, await layoutCtx()), to: parseTo(b.to), ...(replyToOf(lay, values) ? { replyTo: replyToOf(lay, values) } : {}), ...(layoutTemplateId ? { templateId: layoutTemplateId } : {}) });
         await store.saveLayout(made.id, b.layout, values);
         return json(200, { campaign: made });
       }
@@ -128,6 +128,7 @@ export function createEmailHub({ provider, migrateFrom = null, brand = {}, store
           if (!lay) throw new HubError('That email was not made from a layout, so it has no fields to edit.', 409);
           const values = cleanValues(lay, b.layoutValues);
           f.html = renderLayout(lay, values, await layoutCtx());
+          if (replyToOf(lay, values)) f.replyTo = replyToOf(lay, values);
           const campaign = await provider.updateCampaign(id, f);
           await store.saveLayout(id, kept.layout, values);
           return json(200, { campaign });

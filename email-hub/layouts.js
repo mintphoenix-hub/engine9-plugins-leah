@@ -13,14 +13,16 @@
       render: (values, { style, mergeTags, brand }) => '<html>…</html>'   // the whole email, escaping the values itself
     } } })
 
-  Field types: text (one line), longtext (paragraphs), url (an https:// address, or empty). Every value is clipped and checked
+  Field types: text (one line), longtext (paragraphs), url (an https:// address, or empty), select (one of `options: [{ value, label }]`).
+  A layout may also carry `replyTo(values) -> address`: where replies to this email should go (for example the department chosen in a select field).
+  Every value is clipped and checked
   here before the host's render sees it, and only declared fields get through. The output is checked like any email: it must
   carry the service's unsubscribe tag.
 */
 import { HubError } from './provider.js';
 import { checkEmailHtml } from './pasted.js';
 
-const LIMITS = { text: 300, longtext: 8000, url: 600, image: 600 };   // image: the https address of a picture, chosen from the library or uploaded to it
+const LIMITS = { text: 300, longtext: 8000, url: 600, image: 600, select: 120 };   // image: the https address of a picture, chosen from the library or uploaded to it
 const KEY = /^[a-z][a-zA-Z0-9]{0,39}$/;
 const ID = /^[a-z][a-z0-9-]{0,29}$/;
 
@@ -33,6 +35,7 @@ export function checkLayouts(layouts) {
     for (const f of l.fields) {
       if (!KEY.test(f.key || '') || seen.has(f.key)) throw new Error(`layout "${id}" has a missing or repeated field key "${f.key}"`);
       if (!LIMITS[f.type || 'text']) throw new Error(`layout "${id}" field "${f.key}" has an unknown type`);
+      if (f.type === 'select' && !(Array.isArray(f.options) && f.options.length && f.options.every((o) => o && typeof o.value === 'string' && o.value && o.label))) throw new Error(`layout "${id}" field "${f.key}" is a select and needs options with a value and a label`);
       seen.add(f.key);
     }
   }
@@ -42,7 +45,7 @@ export function checkLayouts(layouts) {
 export function listLayouts(layouts) {
   return Object.entries(layouts || {}).map(([id, l]) => ({
     id, label: l.label, description: l.description || '', source: l.source && typeof l.source.list === 'function' && typeof l.source.get === 'function' ? { label: String(l.source.label || 'Suggest copy').slice(0, 80) } : null, sample: l.sample && typeof l.sample === 'object' ? l.sample : null,
-    fields: l.fields.map((f) => ({ key: f.key, label: f.label || f.key, type: f.type || 'text', group: f.group || '', hint: f.hint || '', placeholder: f.placeholder || '', required: Boolean(f.required) }))
+    fields: l.fields.map((f) => ({ key: f.key, label: f.label || f.key, type: f.type || 'text', group: f.group || '', hint: f.hint || '', placeholder: f.placeholder || '', required: Boolean(f.required), ...(f.type === 'select' ? { options: f.options.map((o) => ({ value: o.value, label: String(o.label) })) } : {}) }))
   }));
 }
 
@@ -57,6 +60,7 @@ export function cleanValues(layout, input, { partial = false } = {}) {
     const type = f.type || 'text';
     let v = src[f.key] == null ? '' : String(src[f.key]).replace(/\u0000/g, '');
     v = type === 'longtext' ? v.replace(/\r\n?/g, '\n').slice(0, LIMITS.longtext).trim() : v.replace(/\s+/g, ' ').slice(0, LIMITS[type]).trim();
+    if (type === 'select' && v && !f.options.some((o) => o.value === v)) { if (partial) v = ''; else throw new HubError(`${f.label || f.key}: choose one of the choices shown.`); }
     if ((type === 'url' || type === 'image') && v && !isHttps(v)) { if (partial) v = ''; else throw new HubError(`${f.label || f.key}: use a full https:// address.`); }
     if (f.required && !v && !partial) throw new HubError(`${f.label || f.key} is needed.`);
     out[f.key] = v;
@@ -73,4 +77,11 @@ export function renderLayout(layout, values, ctx, { check = true } = {}) {
     if (found.errors.length) throw new HubError(found.errors[0], 500);
   }
   return html;
+}
+
+/* Where replies to an email made from this layout go: the layout's own answer, or '' (the service's default). Only a plain address counts. */
+export function replyToOf(layout, values) {
+  if (!layout || typeof layout.replyTo !== 'function') return '';
+  const a = String(layout.replyTo(values) || '').trim();
+  return /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[a-z]{2,}$/i.test(a) ? a : '';
 }

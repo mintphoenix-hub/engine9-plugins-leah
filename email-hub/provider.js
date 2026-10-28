@@ -15,9 +15,9 @@
     listCampaigns()             { campaigns: [Campaign], dc? }
     getCampaign(id)             Campaign, freshly read
     campaignContent(id)         { html, template? }   template: the name of the service-side template the email is sent in, when it has one
-    createCampaign(input)       Campaign      input: { subject, previewText, title, html, to: { tagId?, segmentId?, excludeTagId? } }
+    createCampaign(input)       Campaign      input: { subject, previewText, title, html, to: { tagId?, segmentId?, excludeTagId? }, replyTo? }
                                               excludeTagId = everyone except that tag (capabilities.excludeAudience; not combined with tagId/segmentId)
-    updateCampaign(id, fields)  Campaign      fields: { subject?, previewText?, title? }
+    updateCampaign(id, fields)  Campaign      fields: { subject?, previewText?, title?, replyTo? }
     deleteCampaign(id)          {}
     duplicateCampaign(id)       Campaign
     schedule(id, isoUtc)        {}            the hub has already checked the rules

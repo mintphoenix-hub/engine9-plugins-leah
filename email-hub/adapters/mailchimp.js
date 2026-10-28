@@ -105,9 +105,9 @@ export function createMailchimpProvider({ apiKey, listId, fromName = '', replyTo
       const r = await mc(`/reports/${cid(id)}?fields=emails_sent,opens.unique_opens,opens.open_rate,clicks.unique_subscriber_clicks,clicks.click_rate,unsubscribed,bounces.hard_bounces,bounces.soft_bounces`);
       return { recipients: r.emails_sent ?? null, opened: r.opens?.unique_opens ?? null, openRate: r.opens?.open_rate ?? null, clicked: r.clicks?.unique_subscriber_clicks ?? null, clickRate: r.clicks?.click_rate ?? null, unsubscribed: r.unsubscribed ?? null, bounced: (r.bounces?.hard_bounces || 0) + (r.bounces?.soft_bounces || 0) };
     }),
-    createCampaign: guard(async ({ subject, previewText, title, html, to, templateId }) => {
+    createCampaign: guard(async ({ subject, previewText, title, html, to, templateId, replyTo: replyAt }) => {
       const def = (await mc(`/lists/${list}?fields=campaign_defaults`)).campaign_defaults || {};
-      const c = await mc('/campaigns', { method: 'POST', body: { type: 'regular', recipients: recipients(to), settings: { subject_line: subject, preview_text: previewText || '', title: title || subject, from_name: def.from_name || fromName || 'Sender', reply_to: def.from_email || replyTo } } });
+      const c = await mc('/campaigns', { method: 'POST', body: { type: 'regular', recipients: recipients(to), settings: { subject_line: subject, preview_text: previewText || '', title: title || subject, from_name: def.from_name || fromName || 'Sender', reply_to: replyAt || def.from_email || replyTo } } });
       if (templateId) {
         // A template's message goes into its editable area. The area's name is the template's own, so ask for it.
         const sections = (await mc(`/templates/${Number(templateId)}/default-content`)).sections || {};
@@ -123,6 +123,7 @@ export function createMailchimpProvider({ apiKey, listId, fromName = '', replyTo
       if (f.subject !== undefined) settings.subject_line = f.subject;
       if (f.previewText !== undefined) settings.preview_text = f.previewText;
       if (f.title !== undefined) settings.title = f.title;
+      if (f.replyTo !== undefined) settings.reply_to = f.replyTo;
       return shape(await mc(`/campaigns/${cid(id)}`, { method: 'PATCH', body: { settings } }));
     }),
     deleteCampaign: guard(async (id) => { await mc(`/campaigns/${cid(id)}`, { method: 'DELETE' }); return {}; }),
